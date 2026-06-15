@@ -1,0 +1,5 @@
+name,email,country,from_where,customer_cluster,products,json,api_pdf,product_specs
+測試匯入公司一,import1@demo.com,Taiwan,官網表單,JSON_Heavy_APAC,"Alpha API, Zeta Analytics",true,true,false
+歐洲匯入測試,import2@demo.eu,Germany,展會收集,PDF_Only_EU,Delta PDF Pack,false,true,false
+亞太混合客戶,import3@demo.sg,Singapore,LinkedIn 轉介,Mixed_Cluster_APAC,"Beta Specs, Gamma Connector, Theta Edge",true,false,true
+北美製造商,import4@demo.com,United States,貿易展,PDF_Only,Omega Quotation,false,true,false
