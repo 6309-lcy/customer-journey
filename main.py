@@ -220,9 +220,9 @@ def apply_filters(
     name_email = (name_email or "").strip().lower()
 
     for c in clients:
-        # 文字搜尋
+        # 文字搜尋 (support legacy email + new industry)
         if name_email:
-            hay = f"{c.get('name','')} {c.get('email','')}".lower()
+            hay = f"{c.get('name','')} {c.get('email','')} {c.get('industry','')}".lower()
             if name_email not in hay:
                 continue
 
@@ -230,7 +230,7 @@ def apply_filters(
         if countries and c.get("country") not in countries:
             continue
 
-        # 群聚
+        # 群聚 (legacy cluster)
         cl = c.get("customer_cluster") or "Unclassified"
         if clusters and cl not in clusters:
             continue
@@ -502,7 +502,9 @@ def main() -> None:
                 try:
                     data = {"name": name.strip(), "industry": industry.strip() or None}
                     if is_edit:
-                        # For simplicity we just update name/industry here. Related records are added below.
+                        cid = st.session_state.get("edit_client_id")
+                        if cid:
+                            database.update_client(cid, data)
                         st.success("Basic client info updated. Use the sections below to add logs, sales, and deliveries.")
                     else:
                         new_id = database.insert_client(data)
@@ -510,53 +512,6 @@ def main() -> None:
                         st.session_state.edit_client_id = new_id
                         refresh_data()
                         st.rerun()
-                except Exception as e:
-                    st.error(f"Save failed: {e}")
-
-            # Submit button
-            submitted = st.form_submit_button("Save Client", type="primary", use_container_width=True)
-
-            if submitted:
-                try:
-                    # Parse products
-                    products = [p.strip() for p in products_input.split(",") if p.strip()]
-
-                    # Build api_kit
-                    api_kit = {
-                        "json": json_flag,
-                        "api_pdf": pdf_flag,
-                        "product_specs": specs_flag,
-                        "last_requested": datetime.now(timezone.utc).isoformat(),
-                    }
-
-                    payload = {
-                        "name": name.strip(),
-                        "email": email.strip().lower() if not is_edit else (editing_client.get("email") or ""),
-                        "country": country.strip() or None,
-                        "from_where": from_where.strip() or None,
-                        "api_kit": api_kit,
-                        "products": products,
-                        "customer_cluster": cluster_val.strip() or None,
-                    }
-
-                    # Handle history append
-                    if is_edit and new_history_record:
-                        database.update_client(payload["email"], payload)
-                        database.append_request_history(payload["email"], new_history_record)
-                        st.success("Client data and new request history updated successfully.")
-                    else:
-                        if is_edit:
-                            database.update_client(payload["email"], payload)
-                            st.success("Client data updated successfully.")
-                        else:
-                            database.insert_client(payload)
-                            st.success("New client added successfully.")
-
-                    # Clean state
-                    st.session_state.edit_client_id = None
-                    refresh_data()
-                    st.rerun()
-
                 except Exception as e:
                     st.error(f"Save failed: {e}")
 
