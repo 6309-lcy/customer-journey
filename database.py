@@ -280,7 +280,11 @@ def get_country_dispatch_data() -> list[dict]:
         from collections import defaultdict
         agg = defaultdict(int)
         for d in _DEMO_DELIVERIES:
-            agg[d.get("country", "Unknown")] += int(d.get("address_count", 0))
+            try:
+                cnt = int(d.get("address_count") or 0)
+            except (ValueError, TypeError):
+                cnt = 0
+            agg[d.get("country", "Unknown")] += cnt
         return [{"country": k, "total_addresses": v} for k, v in sorted(agg.items(), key=lambda x: -x[1])]
 
     return _query("""
@@ -296,7 +300,11 @@ def get_client_dispatch_data(client_id: int) -> list[dict]:
         agg = defaultdict(int)
         for d in _DEMO_DELIVERIES:
             if d.get("client_id") == client_id:
-                agg[d.get("country", "Unknown")] += int(d.get("address_count", 0))
+                try:
+                    cnt = int(d.get("address_count") or 0)
+                except (ValueError, TypeError):
+                    cnt = 0
+                agg[d.get("country", "Unknown")] += cnt
         return [{"country": k, "total_addresses": v} for k, v in sorted(agg.items(), key=lambda x: -x[1])]
 
     return _query("""
