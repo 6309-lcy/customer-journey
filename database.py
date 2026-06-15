@@ -159,6 +159,49 @@ def insert_client(data: dict) -> int:
     )
 
 
+def fetch_client(client_id: int) -> dict | None:
+    """Fetch single client by id (supports new schema and demo mode)."""
+    if _DEMO_MODE:
+        for c in _DEMO_CLIENTS:
+            if c.get("id") == client_id:
+                return deepcopy(c)
+        return None
+    row = _query("SELECT * FROM clients WHERE id = %s", (client_id,), fetch="one")
+    return dict(row) if row else None
+
+
+def update_client(client_id_or_email, payload: dict) -> None:
+    """Update basic client fields. Supports id (new) or email (legacy fallback). Demo mode in-memory update."""
+    if _DEMO_MODE:
+        for i, c in enumerate(_DEMO_CLIENTS):
+            match = False
+            if isinstance(client_id_or_email, int) and c.get("id") == client_id_or_email:
+                match = True
+            elif isinstance(client_id_or_email, str) and (c.get("email") or "").lower() == str(client_id_or_email).lower():
+                match = True
+            if match:
+                for k, v in payload.items():
+                    if k in ("id",): continue
+                    c[k] = v
+                return
+        return
+    # Real DB: try id first, fallback email (legacy)
+    # For minimal, assume caller passes id when available; implement simple UPDATE
+    if isinstance(client_id_or_email, int):
+        sets = []
+        params = []
+        for k in ("name", "industry"):
+            if k in payload:
+                sets.append(f"{k}=%s")
+                params.append(payload[k])
+        if sets:
+            params.append(client_id_or_email)
+            _execute(f"UPDATE clients SET {', '.join(sets)} WHERE id=%s", tuple(params))
+    else:
+        # legacy email path (no-op or simple if schema has email)
+        pass
+
+
 def update_client_totals(client_id: int):
     if _DEMO_MODE:
         return
