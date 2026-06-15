@@ -345,8 +345,28 @@ def main() -> None:
         if not clients:
             st.info("No client data yet. Please add clients in Client Management or click the sidebar button to load sample data.")
         else:
+            # === Global Dispatch Map (addresses the "per-client maps not global" gap) ===
+            try:
+                global_map = database.get_country_dispatch_data()
+                if global_map:
+                    st.markdown("**Global Addresses Delivered by Country (all clients)**")
+                    gmap_df = pd.DataFrame(global_map)
+                    gfig = px.choropleth(
+                        gmap_df,
+                        locations="country",
+                        locationmode="country names",
+                        color="total_addresses",
+                        hover_name="country",
+                        color_continuous_scale=px.colors.sequential.Plasma,
+                        title="Worldwide Dispatch Heatmap (Demo + Live Data)"
+                    )
+                    gfig.update_layout(height=360, margin={"r":0,"t":20,"l":0,"b":0})
+                    st.plotly_chart(gfig, use_container_width=True)
+            except Exception:
+                pass
+
             # === System Logs Query Tool (replaces old country graphs on homepage) ===
-            # Note: Each client has its own unique dispatching countries map (shown in Client Management when editing a profile).
+            # Note: Per-client maps remain available in Client Management; global view added here.
             st.markdown("### System Logs Query & Export")
             st.caption("Query all system events (onboarding, sales, API requests, etc.). Export the current view to CSV.")
 
@@ -645,12 +665,13 @@ def main() -> None:
                 colmap1, colmap2, colmap3 = st.columns(3)
                 with colmap1:
                     mapping["name"] = st.selectbox("Client Name (name)", csv_cols, index=0, key="map_name")
-                    mapping["email"] = st.selectbox("Email (email) *required", csv_cols, index=0, key="map_email")
+                    mapping["email"] = st.selectbox("Email (legacy/optional)", csv_cols, index=0, key="map_email")
+                    mapping["industry"] = st.selectbox("Industry (new schema)", csv_cols, index=0, key="map_industry")
                     mapping["country"] = st.selectbox("Country (country)", csv_cols, index=0, key="map_country")
                 with colmap2:
                     mapping["from_where"] = st.selectbox("Source / Service Type", csv_cols, index=0, key="map_from")
-                    mapping["customer_cluster"] = st.selectbox("Cluster Label", csv_cols, index=0, key="map_cluster")
-                    mapping["products"] = st.selectbox("Product List (comma separated)", csv_cols, index=0, key="map_products")
+                    mapping["customer_cluster"] = st.selectbox("Cluster Label (legacy)", csv_cols, index=0, key="map_cluster")
+                    mapping["products"] = st.selectbox("Product List (legacy)", csv_cols, index=0, key="map_products")
                 with colmap3:
                     mapping["json"] = st.selectbox("Needs JSON (true/false)", csv_cols, index=0, key="map_json")
                     mapping["api_pdf"] = st.selectbox("Needs PDF", csv_cols, index=0, key="map_pdf")
