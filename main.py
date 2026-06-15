@@ -677,7 +677,7 @@ def main() -> None:
                     mapping["api_pdf"] = st.selectbox("Needs PDF", csv_cols, index=0, key="map_pdf")
                     mapping["product_specs"] = st.selectbox("Needs Product Specs", csv_cols, index=0, key="map_specs")
 
-                if st.button("Execute Import / Update (upsert by email)", type="primary"):
+                if st.button("Execute Import / Update (upsert by name or email; supports industry)", type="primary"):
                     try:
                         raw_rows = utils.parse_csv_with_mapping(uploaded, mapping)
                         valid_profiles, errors = utils.validate_and_normalize_rows(raw_rows)
@@ -762,31 +762,33 @@ def main() -> None:
             st.info("No client data available.")
         else:
             for c in clients:
+                cid = c.get("id")
                 email = c.get("email")
                 name = c.get("name")
+                key_base = str(cid) if cid is not None else (email or name or "unk")
                 current = c.get("customer_cluster") or "Unclassified"
                 suggested = utils.suggest_cluster(c)
 
                 with st.container(border=True):
                     col_a, col_b, col_c = st.columns([2.5, 2, 2.5])
                     with col_a:
-                        st.markdown(f"**{name}**  \n`{email}`")
+                        st.markdown(f"**{name}**  \n`{email or 'id:'+str(cid)}`")
                         st.caption(f"Current cluster: **{current}**")
                     with col_b:
                         st.markdown(f"Suggested: `{suggested}`")
-                        if st.button("Accept Suggestion", key=f"suggest_{email}"):
+                        if st.button("Accept Suggestion", key=f"suggest_{key_base}"):
                             try:
-                                database.update_client(email, {"customer_cluster": suggested})
+                                database.update_client(cid if cid is not None else email, {"customer_cluster": suggested})
                                 st.success("Cluster updated.")
                                 refresh_data()
                                 st.rerun()
                             except Exception as e:
                                 st.error(str(e))
                     with col_c:
-                        new_label = st.text_input("Enter custom cluster label", value=current, key=f"manual_{email}")
-                        if st.button("Save Manual Label", key=f"save_manual_{email}"):
+                        new_label = st.text_input("Enter custom cluster label", value=current, key=f"manual_{key_base}")
+                        if st.button("Save Manual Label", key=f"save_manual_{key_base}"):
                             try:
-                                database.update_client(email, {"customer_cluster": new_label.strip() or None})
+                                database.update_client(cid if cid is not None else email, {"customer_cluster": new_label.strip() or None})
                                 st.success("Saved.")
                                 refresh_data()
                                 st.rerun()

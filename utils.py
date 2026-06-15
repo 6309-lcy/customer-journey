@@ -240,7 +240,7 @@ def parse_csv_with_mapping(uploaded_file, mapping: dict[str, str]) -> list[dict[
         if api_kit:
             record["api_kit"] = api_kit
 
-        if record.get("email"):   # 至少要有 email 才能 upsert
+        if record.get("name") or record.get("email"):   # support new schema (name+industry) or legacy email
             result.append(record)
     return result
 
