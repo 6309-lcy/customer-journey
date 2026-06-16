@@ -10,7 +10,7 @@ networkx>=3.3
 pyvis>=0.3.2
 plotly>=5.22.0
 pymysql>=1.1.1
-cryptography>=42.0.0  # for secure MySQL connections if using caching_sha2_password
+cryptography>=42.0.0  # optional, for secure MySQL connections (caching_sha2_password) when using real DB (not needed for demo)
 
 # 開發/除錯可選（非必要）
 # python-dotenv[cli]>=1.0.1

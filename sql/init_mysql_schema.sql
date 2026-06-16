@@ -3,23 +3,34 @@
 -- Run this in your MySQL client (e.g. MySQL Workbench, CLI, or phpMyAdmin)
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS client_profile_db 
+-- ============================================================
+-- For your setup (connection name "CJ"):
+-- This script will create/use the database named `cj`
+-- If you prefer a different name, change 'cj' in the two lines below + in your .env MYSQL_DATABASE
+-- ============================================================
+
+CREATE DATABASE IF NOT EXISTS cj 
   CHARACTER SET utf8mb4 
   COLLATE utf8mb4_unicode_ci;
 
-USE client_profile_db;
+USE cj;
 
 -- Main clients table
 CREATE TABLE IF NOT EXISTS clients (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
     industry VARCHAR(255),
+    web_store_url VARCHAR(512),   -- URL to client's web store / e-commerce page (new feature)
     total_orders INT DEFAULT 0,
     total_addresses_delivered INT DEFAULT 0,
     total_order_amount DECIMAL(12,2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- For existing databases created before this column:
+-- ALTER TABLE clients ADD COLUMN web_store_url VARCHAR(512) NULL AFTER industry;
 
 -- Communication logs (date + event description)
 CREATE TABLE IF NOT EXISTS communication_logs (
@@ -72,10 +83,10 @@ CREATE INDEX idx_system_logs_timestamp ON system_logs(log_timestamp);
 CREATE INDEX idx_system_logs_industry ON system_logs(industry);
 
 -- Optional: Insert some sample data for testing
-INSERT INTO clients (name, industry, total_orders, total_addresses_delivered, total_order_amount) VALUES
-('Acme Corp', 'Technology', 12, 45, 125000.50),
-('Global Retail Ltd', 'Retail', 8, 120, 87500.00),
-('HealthFirst Inc', 'Healthcare', 5, 22, 45000.00);
+INSERT INTO clients (name, email, industry, web_store_url, total_orders, total_addresses_delivered, total_order_amount) VALUES
+('Acme Corp', 'contact@acme.com', 'Technology', 'https://acme.example.com/store', 12, 45, 125000.50),
+('Global Retail Ltd', 'info@globalretail.com', 'Retail', 'https://globalretail.example.com/shop', 8, 120, 87500.00),
+('HealthFirst Inc', 'hello@healthfirst.com', 'Healthcare', NULL, 5, 22, 45000.00);
 
 INSERT INTO communication_logs (client_id, log_date, event) VALUES
 (1, '2025-01-15', 'Initial contact and contract discussion for API integration'),

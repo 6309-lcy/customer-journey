@@ -312,15 +312,14 @@ def prepare_export_dataframe(clients: list[dict[str, Any]]) -> pd.DataFrame:
 # ============================================================
 
 def get_demo_seed_data() -> list[dict[str, Any]]:
-    """Rich sample data matching the new MySQL schema (clients + logs + sales + deliveries)."""
-    from datetime import datetime, timezone as _tz
-    now = datetime.now(_tz.utc).isoformat()
-
+    """Sample data exactly matching the INSERTs in sql/init_mysql_schema.sql (for demo consistency)."""
     return [
         {
             "id": 1,
             "name": "Acme Corp",
+            "email": "contact@acme.com",
             "industry": "Technology",
+            "web_store_url": "https://acme.example.com/store",
             "total_orders": 12,
             "total_addresses_delivered": 45,
             "total_order_amount": 125000.50,
@@ -328,7 +327,9 @@ def get_demo_seed_data() -> list[dict[str, Any]]:
         {
             "id": 2,
             "name": "Global Retail Ltd",
+            "email": "info@globalretail.com",
             "industry": "Retail",
+            "web_store_url": "https://globalretail.example.com/shop",
             "total_orders": 8,
             "total_addresses_delivered": 120,
             "total_order_amount": 87500.00,
@@ -336,7 +337,9 @@ def get_demo_seed_data() -> list[dict[str, Any]]:
         {
             "id": 3,
             "name": "HealthFirst Inc",
+            "email": "hello@healthfirst.com",
             "industry": "Healthcare",
+            "web_store_url": None,
             "total_orders": 5,
             "total_addresses_delivered": 22,
             "total_order_amount": 45000.00,

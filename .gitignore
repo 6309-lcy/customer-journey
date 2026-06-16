@@ -55,3 +55,12 @@ tmp/
 
 # Supabase local (若使用 supabase CLI)
 .supabase/
+
+# Temp / test / generated
+.gstack/
+mcps/
+test_sync*.py
+uploads/
+__pycache__/
+*.pyc
+.env

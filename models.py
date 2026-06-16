@@ -88,7 +88,7 @@ class ClientProfile(BaseModel):
 
     id: str | None = None
     name: str = Field(..., min_length=1, description="客戶名稱")
-    email: str = Field(..., min_length=3, description="唯一識別用 email")
+    email: str | None = Field(None, description="Legacy email (optional in new schema)")
     country: str | None = None
     from_where: str | None = None
 
