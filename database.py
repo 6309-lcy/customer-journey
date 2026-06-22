@@ -437,9 +437,9 @@ def get_connection():
     return pymysql.connect(
         host=os.getenv("MYSQL_HOST", "localhost"),
         port=int(os.getenv("MYSQL_PORT", 3306)),
-        user=os.getenv("MYSQL_USER", "root"),
+        user=os.getenv("MYSQL_USER", "remoteuser"),
         password=os.getenv("MYSQL_PASSWORD", ""),
-        database=os.getenv("MYSQL_DATABASE", "client_profile_db"),
+        database=os.getenv("MYSQL_DATABASE", "cj"),
         charset="utf8mb4",
         cursorclass=DictCursor,
         autocommit=True,

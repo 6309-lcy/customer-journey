@@ -1,34 +1,39 @@
-"""
-utils.py
-純業務邏輯工具函式（不依賴 Streamlit）
-
-包含：
-- 客戶群聚自動建議（規則式，無 ML）
-- request_history 攤平（供儀表板趨勢圖）
-- API 使用統計
-- CSV 欄位對應解析 + 驗證
-- 匯出用 DataFrame 準備
-"""
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
+from networkx import is_connected
 import pandas as pd
 
 from models import ClientProfile
+import mysql.connector
+from mysql.connector import Error
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
-
-# ==========================
-# 群聚建議（規則式）
-# ==========================
-
+# try: 
+#     connection = mysql.connector.connect(
+#         host = '192.168.16.152',
+#         port=3306,
+#         user =os.getenv('DB_USER'),
+#         password=os.getenv('DB_PASSWORD'),
+#         database=os.getenv("DB_NAME")
+#     )
+#     if connection.is_connected():
+#         cursor = connection.cursor()
+#         cursor.execute("SELECT DATABASE();")
+#         record = cursor.fetchone()
+        
+# except Error as e:
+#     print("error mysql")
+# finally:
+#     if 'connection' in locals() and connection.is_connected():
+#         cursor.close()
+#         connection.close()
 def suggest_cluster(client: dict[str, Any] | ClientProfile) -> str:
-    """
-    根據 api_kit、products、country、from_where 給出建議群聚標籤。
-    規則可在此擴充，永遠回傳字串。
-    """
+    
     if isinstance(client, ClientProfile):
         c = client.model_dump()
     else:
