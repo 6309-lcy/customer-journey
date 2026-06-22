@@ -1,20 +1,4 @@
-"""
-Flask-based Client Management System
-Simple production-oriented app (no Streamlit).
 
-Features per spec:
-- 3 main sections via top navbar: Clients, Clusters, Products
-- Clean enterprise SaaS Tailwind UI (play CDN)
-- MySQL only for now (switchable stub prepared in database.py)
-- Client CRUD + status (Onboarded/Active/Requested/Need help)
-- Client profile with sidebar + tabs (Products / Requests & Communication / Json Files)
-- Clusters as label-based cards with member previews + management
-- Products catalog + drill-down with spec cards + JSON history popup
-
-Run:
-  pip install flask pymysql python-dotenv
-  python app.py
-"""
 
 from __future__ import annotations
 import re
@@ -51,18 +35,7 @@ def allowed_file(filename: str) -> bool:
 # Output = the exact processed wrapper containing full "template"
 # ----------------------------------------------------------
 def process_json_config(config: dict) -> dict:
-    """
-    Exact port of the n8n generation logic from json-processor.
-    Accepts a short config:
-      {
-        "qty": 60,
-        "material paths": "1111,2222,3333",
-        "properties": {"back design mode": "same", "front design mode": "different"},
-        ...
-      }
-    Returns the object that gets written as the final JSON file:
-      { "json": { "template": <full order>, "thirdOrderId": "...", "quantity": N } }
-    """
+    
     try:
         quantity = int(str(config.get("qty", 1)))
     except Exception:
@@ -77,11 +50,27 @@ def process_json_config(config: dict) -> dict:
     raw_props = config.get("properties")
     if isinstance(raw_props, dict):
         properties = dict(raw_props)
-
-    page_content_designs = [
-        {"pageContentIndex": i, "effect": "CMYK", "image": image_link}
-        for i in range(quantity)
-    ]
+    effect = config.get("printing_effects")
+    if raw_props['front design mode'] == "same":
+        page_content_designs_front = [
+            {"pageContentIndex": 0, "effect": effect, "image": image_link}
+            # for i in range(quantity)
+        ]
+    else:
+        page_content_designs_front = [
+            {"pageContentIndex": i, "effect": effect, "image": image_link}
+            for i in range(quantity)
+        ]
+    if raw_props['back design mode'] == "same":
+        page_content_designs_back = [
+            {"pageContentIndex": 0, "effect": effect, "image": image_link}
+            # for i in range(quantity)
+        ]
+    else:
+        page_content_designs_back = [
+            {"pageContentIndex": i, "effect": effect, "image": image_link}
+            for i in range(quantity)
+        ]
 
     third_order_id = "replace_with_your_order_number"
 
@@ -98,12 +87,12 @@ def process_json_config(config: dict) -> dict:
                 {
                     "side": "Card_Front",
                     "materialPath": material_path,
-                    "pageContentDesigns": list(page_content_designs)
+                    "pageContentDesigns": list(page_content_designs_front)
                 },
                 {
                     "side": "Card_Back",
                     "materialPath": material_path,
-                    "pageContentDesigns": list(page_content_designs)
+                    "pageContentDesigns": list(page_content_designs_back)
                 }
             ],
             "content": [
@@ -444,6 +433,7 @@ def add_json_for_client(client_id: int):
     finish = request.form.get("finish") or ""
     packaging = request.form.get("packaging") or ""
     seal = request.form.get("seal") or ""
+    eff =request.form.get("effect") or ""
     card_sel = request.form.get("card_selection_mode") or ""
     store_pt = request.form.get("store_product_type") or ""
     img_front = request.form.get("image_text_front") or ""
@@ -481,6 +471,8 @@ def add_json_for_client(client_id: int):
         summary.append(f"Front: {img_front}")
     if img_back:
         summary.append(f"Back: {img_back}")
+    if eff:
+        summary.append(f"Effect: {eff}")
 
     # Filter for actual stored product_specs (no product name, no store type)
     specs_for_record = [s for s in summary if "Store" not in s]
@@ -522,7 +514,8 @@ def add_json_for_client(client_id: int):
         "properties": {
             "back design mode": back_mode,
             "front design mode": front_mode
-        }
+        },
+        "printing_effects" : eff
     }
 
     # Generate using the ported mechanism (returns the template directly)

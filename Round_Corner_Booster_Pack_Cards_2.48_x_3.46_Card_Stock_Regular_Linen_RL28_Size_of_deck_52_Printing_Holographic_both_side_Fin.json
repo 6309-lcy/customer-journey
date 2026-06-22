@@ -1,0 +1,610 @@
+{
+  "thirdOrderId": "replace_with_your_order_number",
+  "thirdOrderNumber": "replace_with_your_order_number",
+  "items": [
+    {
+      "thirdOrderItemId": "replace_with_your_order_number",
+      "qty": 52,
+      "unitPrice": "10.00",
+      "storeProductId": "your_store_product_id",
+      "properties": {
+        "back design mode": "same",
+        "front design mode": "same"
+      },
+      "customizeProject": {
+        "customizeType": "IMAGE",
+        "comparisonThumbnail": "replace_with_your_design",
+        "designs": [
+          {
+            "side": "Card_Front",
+            "materialPath": "1111,1111,1111,1111,1111,1111,1111,1111,1111",
+            "pageContentDesigns": [
+              {
+                "pageContentIndex": 0,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 1,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 2,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 3,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 4,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 5,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 6,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 7,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 8,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 9,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 10,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 11,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 12,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 13,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 14,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 15,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 16,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 17,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 18,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 19,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 20,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 21,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 22,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 23,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 24,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 25,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 26,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 27,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 28,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 29,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 30,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 31,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 32,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 33,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 34,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 35,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 36,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 37,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 38,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 39,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 40,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 41,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 42,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 43,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 44,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 45,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 46,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 47,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 48,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 49,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 50,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 51,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              }
+            ]
+          },
+          {
+            "side": "Card_Back",
+            "materialPath": "1111,1111,1111,1111,1111,1111,1111,1111,1111",
+            "pageContentDesigns": [
+              {
+                "pageContentIndex": 0,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 1,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 2,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 3,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 4,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 5,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 6,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 7,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 8,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 9,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 10,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 11,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 12,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 13,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 14,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 15,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 16,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 17,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 18,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 19,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 20,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 21,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 22,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 23,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 24,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 25,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 26,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 27,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 28,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 29,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 30,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 31,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 32,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 33,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 34,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 35,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 36,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 37,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 38,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 39,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 40,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 41,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 42,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 43,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 44,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 45,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 46,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 47,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 48,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 49,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 50,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              },
+              {
+                "pageContentIndex": 51,
+                "effect": "CMYK",
+                "image": "replace_with_your_design"
+              }
+            ]
+          }
+        ],
+        "content": [
+          {
+            "side": "Booster_Pack",
+            "image": "replace_with_your_design"
+          }
+        ]
+      }
+    }
+  ],
+  "shippingMethod": "Standard",
+  "paymentMethod": "PayPal",
+  "currency": "USD",
+  "status": "processing",
+  "deliveryAddress": {
+    "country": "US",
+    "state": "NJ",
+    "city": "Atlantic City",
+    "address_1": "1301 Bacharach Boulevard Atlantic City NJ 08401 United States",
+    "address_2": "",
+    "postcode": "08401",
+    "first_name": "REPLACE_WITH_FIRST_NAME",
+    "last_name": "REPLACE_WITH_LAST_NAME",
+    "phone": "0777-123456",
+    "mobile": "18475031246",
+    "email": "REPLACE_WITH_EMAIL@example.com",
+    "company": "REPLACE_WITH_COMPANY"
+  },
+  "billingAddress": {
+    "country": "US",
+    "state": "NJ",
+    "city": "Atlantic City",
+    "address_1": "1301 Bacharach Boulevard Atlantic City NJ 08401 United States",
+    "address_2": "",
+    "postcode": "08401",
+    "first_name": "REPLACE_WITH_FIRST_NAME",
+    "last_name": "REPLACE_WITH_LAST_NAME",
+    "phone": "0777-123456",
+    "mobile": "18475031246",
+    "email": "REPLACE_WITH_EMAIL@example.com",
+    "company": "REPLACE_WITH_COMPANY"
+  },
+  "orderTotals": [
+    {
+      "name": "TAX",
+      "value": "0.00"
+    },
+    {
+      "name": "SHIPPING",
+      "value": "1.00"
+    },
+    {
+      "name": "SUBTOTAL",
+      "value": "520.00"
+    },
+    {
+      "name": "ORDER_TOTAL",
+      "value": "572.00"
+    }
+  ]
+}
