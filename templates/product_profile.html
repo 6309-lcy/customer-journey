@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flex gap-8">
+  <!-- LEFT SIDEBAR -->
+  <div class="w-72 shrink-0">
+    <div class="bg-white border border-slate-200 rounded-3xl p-6 sticky top-20">
+      <div class="text-sm text-slate-500">{{ product.type or product.category or '—' }} > {{ product.sub_type or product.subtype or '—' }}</div>
+      <div class="font-semibold text-xl tracking-tight mt-1">{{ product.name }}</div>
+
+      <div class="mt-6 text-xs uppercase tracking-widest text-slate-400">Description</div>
+      <div class="text-sm text-slate-600 mt-1">{{ product.description or 'No description' }}</div>
+
+      <div class="mt-8 text-xs text-slate-400">
+        Clients using this product: <span class="font-medium text-slate-700">{{ clients|length }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN: Spec cards + JSONs -->
+  <div class="flex-1">
+    <div class="border border-slate-200 rounded-3xl p-5 mb-5">
+
+      <div class="mb-4 font-medium">Product Specs &amp; JSON Templates</div>
+
+      {% if json_files %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {% for jf in json_files %}
+            <div onclick="showJsonHistory({{ jf.json_template_id or 0 }})" 
+                class="cursor-pointer border border-slate-200 bg-white rounded-3xl p-4 hover:border-slate-400 transition">
+              <div class="font-medium">{{ jf.template_name or 'JSON Template' }}</div>
+              <div class="text-xs text-slate-400 mt-1">Specs: {{ jf.specs if jf.specs else '—' }}</div>
+              <div class="text-[10px] mt-4 text-blue-600">Click to view request history &amp; download →</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-slate-400">No JSON templates linked to this product yet.</div>
+      {% endif %}
+
+      <div class="mt-8 text-xs text-slate-400">
+        Click any spec card above to see which clients requested that specific JSON and download it.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JSON History Modal -->
+<div id="json-modal" onclick="this.classList.add('hidden')" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+  <div onclick="event.stopImmediatePropagation()" class="bg-white max-w-2xl w-full mx-4 rounded-3xl p-6 modal">
+    <div class="flex justify-between mb-4">
+      <div id="modal-title" class="font-semibold"></div>
+      <button onclick="document.getElementById('json-modal').classList.add('hidden')" class="text-xl">×</button>
+    </div>
+
+    <div id="modal-content" class="text-sm">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="mt-4 text-right">
+      <a id="modal-download" href="#" class="inline-block px-4 py-2 bg-slate-900 text-white text-sm rounded-2xl">Download JSON</a>
+    </div>
+  </div>
+</div>
+
+<script>
+async function showJsonHistory(templateId) {
+  const modal = document.getElementById('json-modal');
+  const titleEl = document.getElementById('modal-title');
+  const contentEl = document.getElementById('modal-content');
+  const dl = document.getElementById('modal-download');
+
+  modal.classList.remove('hidden');
+  titleEl.textContent = 'Loading history...';
+  contentEl.innerHTML = '<div class="text-slate-400">Loading...</div>';
+
+  try {
+    const res = await fetch(`/json/${templateId}/history`);
+    const html = await res.text();
+    contentEl.innerHTML = html;
+    titleEl.textContent = 'JSON Request History';
+    // Try to set download link if a filename appears
+    const firstLink = contentEl.querySelector('a[href*="/uploads"]');
+    if (firstLink) dl.href = firstLink.href;
+  } catch(e) {
+    contentEl.innerHTML = 'Failed to load history.';
+  }
+}
+</script>
+{% endblock %}

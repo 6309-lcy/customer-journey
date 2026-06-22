@@ -7,17 +7,22 @@ Supports:
 - Full DEMO MODE (in-memory) for frontend testing (set USE_SAMPLE_DATA=true)
 
 New data model includes:
-- clients (name, industry, totals)
+- clients (name, industry, totals, api_* flags)
 - communication_logs
-- sales_records
+- sales_records (with optional product)
 - deliveries (for world map by country)
 - system_logs (queryable on homepage)
+- products + client_products + json_templates + client_json_sends
+
+Key analytics: get_key_metrics() computes avg response time (inter-comm gaps) and
+conversion time = days from first comm log ("first request") to first JSON API template send.
 
 All functions return plain dicts/lists for easy use in Streamlit + Pydantic.
+Graceful fallbacks for missing tables (demo/cloud friendly).
 """
 
 from __future__ import annotations
-
+import re
 import json
 import os
 from copy import deepcopy
@@ -27,6 +32,15 @@ from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ----------------------------------------------------------
+# DB backend switch (production prep)
+#   - "mysql"  → pymysql (current)
+#   - "mongodb" → pymongo (stub - implement later)
+# Set DB_BACKEND=mongodb in .env to switch later.
+# Currently we only wire MySQL path.
+# ----------------------------------------------------------
+DB_BACKEND = os.getenv("DB_BACKEND", "mysql").lower()
 
 # ============================================================
 # DEMO MODE (in-memory, no DB required)
@@ -61,7 +75,10 @@ def enable_demo_mode(seed_clients: list[dict] | None = None):
     _DEMO_COMMS = [
         {"client_id": 1, "log_date": "2025-01-15", "event": "Initial contact and contract discussion for API integration"},
         {"client_id": 1, "log_date": "2025-02-20", "event": "Follow-up meeting - signed API integration contract"},
+        {"client_id": 1, "log_date": "2025-04-10", "event": "Requested full JSON API template"},
         {"client_id": 2, "log_date": "2025-03-10", "event": "Demo of product catalog sync"},
+        {"client_id": 2, "log_date": "2025-04-22", "event": "Follow-up requirements"},
+        {"client_id": 3, "log_date": "2025-05-05", "event": "Requested JSON + API specs for pilot"},
     ]
     _DEMO_SALES = [
         {"client_id": 1, "sale_date": "2025-04-05", "description": "Sold out 30 decks", "quantity": 30, "amount": 15000.00},
@@ -85,6 +102,8 @@ def enable_demo_mode(seed_clients: list[dict] | None = None):
             c["web_store_url"] = None
         if "notes" not in c:
             c["notes"] = None
+        if "customer_cluster" not in c:
+            c["customer_cluster"] = None
         # backfill api flags if missing for demo
         for fl in ("api_pdf", "json_file", "product_specs"):
             if fl not in c:
@@ -93,10 +112,11 @@ def enable_demo_mode(seed_clients: list[dict] | None = None):
     # Seed demo products, junctions, some json sends for UI testing (Products/JSON tabs, profile assigns, slicers etc)
     global _DEMO_PRODUCTS, _DEMO_CLIENT_PRODUCTS, _DEMO_JSON_TEMPLATES, _DEMO_CLIENT_JSON_SENDS
     if not _DEMO_PRODUCTS:
-        _DEMO_PRODUCTS = [
-            {"id": 1, "name": "Booster Pack", "category": "Packaging", "specs": json.dumps(["20X20X20"])},
-            {"id": 2, "name": "Sensor Module", "category": "Electronics", "specs": json.dumps(["v1", "v2"])},
-            {"id": 3, "name": "Custom API Kit", "category": "Integration", "specs": json.dumps(["basic", "advanced"])},
+       _DEMO_PRODUCTS = [
+            {"id": 1, "name": "Round Corner Booster Pack Cards (2.5\" x 3.5\")", "category": "Custom Card Decks", "subtype": "Playing Cards", "specs": json.dumps(["20X20X20", "30X30X30"])},
+            {"id": 2, "name": "Trading Card Game (2.48\" x 3.46\")", "category": "Custom Cards Decks", "subtype": "Trading Cards", "specs": json.dumps(["v1", "v2", "v2.1"])},
+            {"id": 3, "name": "Square Corner Booster Pack Cards (2.5\" x 3.5\")", "category": "Custom Cards Decks", "subtype": "Sports & Collectible Cards", "specs": json.dumps(["basic", "advanced", "enterprise"])},
+            {"id": 4, "name": "Tarot Cards (2.75\" x 4.75\")", "category": "Custom Card Decks", "subtype": "Tarot Cards", "specs": json.dumps(["white", "clear", "thermal"])},
         ]
     if not _DEMO_CLIENT_PRODUCTS:
         _DEMO_CLIENT_PRODUCTS = [
@@ -112,6 +132,7 @@ def enable_demo_mode(seed_clients: list[dict] | None = None):
     if not _DEMO_CLIENT_JSON_SENDS:
         _DEMO_CLIENT_JSON_SENDS = [
             {"id": 1, "client_id": 1, "json_template_id": 1, "sent_date": "2025-06-10", "product": "Booster Pack", "product_specs": ["20X20X20"]},
+            {"id": 2, "client_id": 3, "json_template_id": 1, "sent_date": "2025-06-20", "product": "Custom API Kit", "product_specs": ["basic"]},
         ]
 
     # Ensure sales have optional product for slicers/product pick in sales logs
@@ -158,18 +179,18 @@ def clear_and_seed_test_data():
         _DEMO_CLIENT_JSON_SENDS = []
 
         _DEMO_CLIENTS = [
-            {"id": 1, "name": "Acme Corp", "email": "contact@acme.com", "industry": "Technology", "web_store_url": "https://acme.example.com/store", "notes": "Key account - prefers JSON", "api_pdf": True, "json_file": True, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0},
-            {"id": 2, "name": "Global Retail Ltd", "email": "info@globalretail.com", "industry": "Retail", "web_store_url": "https://globalretail.example.com/shop", "notes": "High volume packaging", "api_pdf": False, "json_file": True, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0},
-            {"id": 3, "name": "HealthFirst Inc", "email": "hello@healthfirst.com", "industry": "Healthcare", "web_store_url": None, "notes": "Compliance focused", "api_pdf": True, "json_file": False, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0},
-            {"id": 4, "name": "Nordic Manufacturing", "email": "sales@nordic-mfg.no", "industry": "Manufacturing", "web_store_url": "https://nordic-mfg.example.com", "notes": "", "api_pdf": True, "json_file": True, "product_specs": False, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0},
-            {"id": 5, "name": "Pacific Logistics", "email": "ops@pacific-logistics.au", "industry": "Logistics", "web_store_url": None, "notes": "New - testing packs", "api_pdf": False, "json_file": True, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0},
+            {"id": 1, "name": "Acme Corp", "email": "contact@acme.com", "industry": "Technology", "web_store_url": "https://acme.example.com/store", "notes": "Key account - prefers JSON", "api_pdf": True, "json_file": True, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0, "customer_cluster": "Strategic", "status": "Onboarded"},
+            {"id": 2, "name": "Global Retail Ltd", "email": "info@globalretail.com", "industry": "Retail", "web_store_url": "https://globalretail.example.com/shop", "notes": "High volume packaging", "api_pdf": False, "json_file": True, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0, "customer_cluster": "Volume Packaging", "status": "Active"},
+            {"id": 3, "name": "HealthFirst Inc", "email": "hello@healthfirst.com", "industry": "Healthcare", "web_store_url": None, "notes": "Compliance focused", "api_pdf": True, "json_file": False, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0, "customer_cluster": "Compliance", "status": "Requested"},
+            {"id": 4, "name": "Nordic Manufacturing", "email": "sales@nordic-mfg.no", "industry": "Manufacturing", "web_store_url": "https://nordic-mfg.example.com", "notes": "", "api_pdf": True, "json_file": True, "product_specs": False, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0, "customer_cluster": "Integration Focused", "status": "Active"},
+            {"id": 5, "name": "Pacific Logistics", "email": "ops@pacific-logistics.au", "industry": "Logistics", "web_store_url": None, "notes": "New - testing packs", "api_pdf": False, "json_file": True, "product_specs": True, "total_orders": 0, "total_addresses_delivered": 0, "total_order_amount": 0.0, "customer_cluster": "New Logistics", "status": "Onboarded"},
         ]
 
         _DEMO_PRODUCTS = [
-            {"id": 1, "name": "Booster Pack", "category": "Packaging", "specs": json.dumps(["20X20X20", "30X30X30"])},
-            {"id": 2, "name": "Sensor Module", "category": "Electronics", "specs": json.dumps(["v1", "v2", "v2.1"])},
-            {"id": 3, "name": "Custom API Kit", "category": "Integration", "specs": json.dumps(["basic", "advanced", "enterprise"])},
-            {"id": 4, "name": "Label Stock 100mm", "category": "Consumables", "specs": json.dumps(["white", "clear", "thermal"])},
+            {"id": 1, "name": "Round Corner Booster Pack Cards (2.5\" x 3.5\")", "category": "Custom Card Decks", "subtype": "Playing Cards", "specs": json.dumps(["20X20X20", "30X30X30"])},
+            {"id": 2, "name": "Trading Card Game (2.48\" x 3.46\")", "category": "Custom Cards Decks", "subtype": "Trading Cards", "specs": json.dumps(["v1", "v2", "v2.1"])},
+            {"id": 3, "name": "Square Corner Booster Pack Cards (2.5\" x 3.5\")", "category": "Custom Cards Decks", "subtype": "Sports & Collectible Cards", "specs": json.dumps(["basic", "advanced", "enterprise"])},
+            {"id": 4, "name": "Tarot Cards (2.75\" x 4.75\")", "category": "Custom Card Decks", "subtype": "Tarot Cards", "specs": json.dumps(["white", "clear", "thermal"])},
         ]
 
         _DEMO_CLIENT_PRODUCTS = [
@@ -216,9 +237,19 @@ def clear_and_seed_test_data():
         _DEMO_CLIENT_JSON_SENDS = [
             {"id": 1, "client_id": 1, "json_template_id": 1, "sent_date": "2025-06-01", "product": "Booster Pack", "product_specs": ["20X20X20"]},
             {"id": 2, "client_id": 3, "json_template_id": 2, "sent_date": "2025-06-03", "product": "Sensor Module", "product_specs": ["v1","v2"]},
+            {"id": 3, "client_id": 5, "json_template_id": 1, "sent_date": "2025-06-15", "product": "Booster Pack", "product_specs": ["20X20X20"]},
         ]
 
-        _DEMO_COMMS = [{"client_id":1,"log_date":"2025-02-10","event":"Kickoff - API contract"}, {"client_id":5,"log_date":"2025-05-10","event":"Onboarding - requested JSON"}]
+        _DEMO_COMMS = [
+            {"client_id":1,"log_date":"2025-02-10","event":"Kickoff - API contract"},
+            {"client_id":1,"log_date":"2025-03-05","event":"Requirements workshop for integration"},
+            {"client_id":1,"log_date":"2025-04-12","event":"Contract review and API discussion"},
+            {"client_id":1,"log_date":"2025-05-20","event":"Requested JSON template for Booster integration"},
+            {"client_id":5,"log_date":"2025-05-10","event":"Onboarding - requested JSON"},
+            {"client_id":3,"log_date":"2025-04-15","event":"Pilot kickoff, requested API specs + JSON"},
+            {"client_id":2,"log_date":"2025-01-20","event":"Initial inquiry and catalog demo"},
+            {"client_id":2,"log_date":"2025-02-28","event":"Follow-up pricing call"},
+        ]
         _DEMO_SYSTEM_LOGS = [{"log_timestamp":"2025-06-01T09:15:00","message":"Test seed: JSON + sales with products loaded","tags":["seed"],"client_name":None,"industry":None}]
 
         for c in _DEMO_CLIENTS:
@@ -236,24 +267,24 @@ def clear_and_seed_test_data():
 
     # clients
     cids = {}
-    for idx, (nm, em, ind, url, ap, jf, ps, nt) in enumerate([
-        ("Acme Corp","contact@acme.com","Technology","https://acme.example.com/store",True,True,True,"Key account"),
-        ("Global Retail Ltd","info@globalretail.com","Retail","https://globalretail.example.com/shop",False,True,True,"High volume"),
-        ("HealthFirst Inc","hello@healthfirst.com","Healthcare",None,True,False,True,"Compliance"),
-        ("Nordic Manufacturing","sales@nordic-mfg.no","Manufacturing","https://nordic-mfg.example.com",True,True,False,""),
-        ("Pacific Logistics","ops@pacific-logistics.au","Logistics",None,False,True,True,"New onboarding"),
+    for idx, (nm, em, ind, url, ap, jf, ps, nt, cl, st) in enumerate([
+        ("Acme Corp","contact@acme.com","Technology","https://acme.example.com/store",True,True,True,"Key account","Strategic","Onboarded"),
+        ("Global Retail Ltd","info@globalretail.com","Retail","https://globalretail.example.com/shop",False,True,True,"High volume","Volume Packaging","Active"),
+        ("HealthFirst Inc","hello@healthfirst.com","Healthcare",None,True,False,True,"Compliance","Compliance","Requested"),
+        ("Nordic Manufacturing","sales@nordic-mfg.no","Manufacturing","https://nordic-mfg.example.com",True,True,False,"","Integration Focused","Active"),
+        ("Pacific Logistics","ops@pacific-logistics.au","Logistics",None,False,True,True,"New onboarding","New Logistics","Onboarded"),
     ],1):
-        cids[idx] = insert_client({"name":nm,"email":em,"industry":ind,"web_store_url":url,"api_pdf":ap,"json_file":jf,"product_specs":ps,"notes":nt,"total_orders":0,"total_addresses_delivered":0,"total_order_amount":0.0})
+        cids[idx] = insert_client({"name":nm,"email":em,"industry":ind,"web_store_url":url,"api_pdf":ap,"json_file":jf,"product_specs":ps,"notes":nt,"total_orders":0,"total_addresses_delivered":0,"total_order_amount":0.0,"customer_cluster":cl,"status":st})
 
-    # products
+    # products (using the 4 types from UI)
     pids = {}
-    for idx, (nm, cat, sp) in enumerate([
-        ("Booster Pack","Packaging",["20X20X20","30X30X30"]),
-        ("Sensor Module","Electronics",["v1","v2","v2.1"]),
-        ("Custom API Kit","Integration",["basic","advanced","enterprise"]),
-        ("Label Stock 100mm","Consumables",["white","clear","thermal"]),
+    for idx, (nm, cat, sp, sub) in enumerate([
+        ("Standard 20x","Custom Card Decks",["20X20X20","30X30X30"], "Booster Pack"),
+        ("Basic v1","Board Game Components",["v1","v2","v2.1"], "Sensor Module"),
+        ("Entry Kit","Merch & Apparel",["basic","advanced","enterprise"], "Custom API Kit"),
+        ("White Label","Jigsaw Puzzles",["white","clear","thermal"], "Label Stock 100mm"),
     ],1):
-        pids[idx] = create_product(nm, cat, sp)
+        pids[idx] = create_product(nm, cat, sp, subtype=sub)
 
     # junctions (overlap)
     for cnum, plist in [(1,[1,3]),(2,[1,4]),(3,[2,1]),(4,[3,2]),(5,[1,4])]:
@@ -296,10 +327,16 @@ def clear_and_seed_test_data():
                 _execute("INSERT IGNORE INTO product_json_files (product_id, specs, json_template_id) VALUES (%s,%s,%s)", (prow["id"], json.dumps(specs), tid))
         except: pass
 
-    # comms + totals
+    # comms + totals (richer for metrics demo)
     try:
         add_communication_log(cids[1], "2025-02-10", "Kickoff call - API integration contract")
+        add_communication_log(cids[1], "2025-03-05", "Requirements workshop for integration")
+        add_communication_log(cids[1], "2025-04-12", "Contract review and API discussion")
+        add_communication_log(cids[1], "2025-05-20", "Requested JSON template for Booster integration")
         add_communication_log(cids[5], "2025-05-10", "New customer onboarding - requested JSON template")
+        add_communication_log(cids[3], "2025-04-15", "Pilot kickoff, requested API specs + JSON")
+        add_communication_log(cids[2], "2025-01-20", "Initial inquiry and catalog demo")
+        add_communication_log(cids[2], "2025-02-28", "Follow-up pricing call")
     except: pass
 
     for cid in cids.values():
@@ -322,7 +359,9 @@ def reset_demo_data():
         _DEMO_COMMS = [
             {"client_id": 1, "log_date": "2025-01-15", "event": "Initial contact and contract discussion for API integration"},
             {"client_id": 1, "log_date": "2025-02-20", "event": "Follow-up meeting - signed API integration contract"},
+            {"client_id": 1, "log_date": "2025-04-10", "event": "Requested full JSON API template"},
             {"client_id": 2, "log_date": "2025-03-10", "event": "Demo of product catalog sync"},
+            {"client_id": 2, "log_date": "2025-04-22", "event": "Follow-up requirements"},
         ]
         _DEMO_SALES = [
             {"client_id": 1, "sale_date": "2025-04-05", "description": "Sold out 30 decks", "quantity": 30, "amount": 15000.00},
@@ -346,15 +385,18 @@ def reset_demo_data():
             c["web_store_url"] = None
         if "notes" not in c:
             c["notes"] = None
+        if "customer_cluster" not in c:
+            c["customer_cluster"] = None
         for fl in ("api_pdf", "json_file", "product_specs"):
             if fl not in c:
                 c[fl] = False
 
     global _DEMO_PRODUCTS, _DEMO_CLIENT_PRODUCTS, _DEMO_JSON_TEMPLATES, _DEMO_CLIENT_JSON_SENDS
     _DEMO_PRODUCTS = [
-        {"id": 1, "name": "Booster Pack", "category": "Packaging", "specs": json.dumps(["20X20X20"])},
-        {"id": 2, "name": "Sensor Module", "category": "Electronics", "specs": json.dumps(["v1", "v2"])},
-        {"id": 3, "name": "Custom API Kit", "category": "Integration", "specs": json.dumps(["basic", "advanced"])},
+        {"id": 1, "name": "Round Corner Booster Pack Cards (2.5\" x 3.5\")", "category": "Custom Card Decks", "subtype": "Playing Cards", "specs": json.dumps(["20X20X20", "30X30X30"])},
+        {"id": 2, "name": "Trading Card Game (2.48\" x 3.46\")", "category": "Custom Cards Decks", "subtype": "Trading Cards", "specs": json.dumps(["v1", "v2", "v2.1"])},
+        {"id": 3, "name": "Square Corner Booster Pack Cards (2.5\" x 3.5\")", "category": "Custom Cards Decks", "subtype": "Sports & Collectible Cards", "specs": json.dumps(["basic", "advanced", "enterprise"])},
+        {"id": 4, "name": "Tarot Cards (2.75\" x 4.75\")", "category": "Custom Card Decks", "subtype": "Tarot Cards", "specs": json.dumps(["white", "clear", "thermal"])},
     ]
     _DEMO_CLIENT_PRODUCTS = [
         {"client_id": 1, "product_id": 1},
@@ -383,19 +425,15 @@ def reset_demo_data():
 # ============================================================
 
 def get_connection():
+    if DB_BACKEND == "mongodb":
+        raise RuntimeError("MongoDB backend selected (DB_BACKEND=mongodb). Implement pymongo path in database.py or switch to mysql.")
     if _DEMO_MODE:
-        raise RuntimeError("DEMO MODE active — MySQL is disabled. Use real data or turn off USE_SAMPLE_DATA.")
+        raise RuntimeError("DEMO MODE active — MySQL is disabled.")
     try:
         import pymysql
         from pymysql.cursors import DictCursor
     except ImportError:
-        # Auto-fallback so that even direct calls don't hard-crash the app
-        enable_demo_mode()
-        raise RuntimeError(
-            "pymysql is not installed. Auto-switched to DEMO mode for this session. "
-            "To use real MySQL: pip install pymysql cryptography , set USE_SAMPLE_DATA=false in .env, "
-            "configure MYSQL_* , and run sql/init_mysql_schema.sql against your database."
-        )
+        raise RuntimeError("pymysql not installed. Run: pip install pymysql cryptography")
     return pymysql.connect(
         host=os.getenv("MYSQL_HOST", "localhost"),
         port=int(os.getenv("MYSQL_PORT", 3306)),
@@ -458,6 +496,8 @@ def insert_client(data: dict) -> int:
             "api_pdf": bool(data.get("api_pdf", False)),
             "json_file": bool(data.get("json_file", False)),
             "product_specs": bool(data.get("product_specs", False)),
+            "customer_cluster": data.get("customer_cluster"),
+            "status": data.get("status", "Onboarded"),
         }
         _DEMO_CLIENTS.append(rec)
         # Auto system log
@@ -470,8 +510,8 @@ def insert_client(data: dict) -> int:
 
     new_id = _execute(
         """INSERT INTO clients (name, email, industry, web_store_url, api_pdf, json_file, product_specs,
-                                total_orders, total_addresses_delivered, total_order_amount, notes)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                total_orders, total_addresses_delivered, total_order_amount, notes, customer_cluster, status)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (
             data.get("name"),
             data.get("email"),
@@ -484,6 +524,8 @@ def insert_client(data: dict) -> int:
             data.get("total_addresses_delivered", 0),
             data.get("total_order_amount", 0),
             data.get("notes"),
+            data.get("customer_cluster"),
+            data.get("status", "Onboarded"),
         )
     )
     # Auto system log
@@ -529,7 +571,7 @@ def update_client(client_id_or_email, payload: dict) -> None:
     if isinstance(client_id_or_email, int):
         sets = []
         params = []
-        allowed = ("name", "email", "industry", "web_store_url", "api_pdf", "json_file", "product_specs", "notes")
+        allowed = ("name", "email", "industry", "web_store_url", "api_pdf", "json_file", "product_specs", "notes", "customer_cluster", "status")
         for k in allowed:
             if k in payload:
                 sets.append(f"{k}=%s")
@@ -544,7 +586,7 @@ def update_client(client_id_or_email, payload: dict) -> None:
         # legacy email fallback (best effort)
         sets = []
         params = []
-        allowed = ("name", "email", "industry", "web_store_url", "api_pdf", "json_file", "product_specs", "notes")
+        allowed = ("name", "email", "industry", "web_store_url", "api_pdf", "json_file", "product_specs", "notes", "customer_cluster", "status")
         for k in allowed:
             if k in payload:
                 sets.append(f"{k}=%s")
@@ -568,6 +610,27 @@ def update_client_totals(client_id: int):
             total_order_amount = (SELECT COALESCE(SUM(amount),0) FROM sales_records WHERE client_id=c.id)
         WHERE c.id = %s
     """, (client_id,))
+
+
+def delete_client(client_id: int):
+    """Delete a client (and cascade related if FKs set, otherwise manual)."""
+    if _DEMO_MODE:
+        global _DEMO_CLIENTS, _DEMO_COMMS, _DEMO_SALES, _DEMO_DELIVERIES, _DEMO_CLIENT_PRODUCTS, _DEMO_CLIENT_JSON_SENDS
+        _DEMO_CLIENTS = [c for c in _DEMO_CLIENTS if c.get("id") != client_id]
+        _DEMO_COMMS = [x for x in _DEMO_COMMS if x.get("client_id") != client_id]
+        _DEMO_SALES = [x for x in _DEMO_SALES if x.get("client_id") != client_id]
+        _DEMO_DELIVERIES = [x for x in _DEMO_DELIVERIES if x.get("client_id") != client_id]
+        _DEMO_CLIENT_PRODUCTS = [x for x in _DEMO_CLIENT_PRODUCTS if x.get("client_id") != client_id]
+        _DEMO_CLIENT_JSON_SENDS = [x for x in _DEMO_CLIENT_JSON_SENDS if x.get("client_id") != client_id]
+        return
+    # Real
+    # Clean dependent rows first (in case no FK cascade)
+    for tbl in ("client_json_sends", "sales_records", "deliveries", "communication_logs", "client_products"):
+        try:
+            _execute(f"DELETE FROM {tbl} WHERE client_id = %s", (client_id,))
+        except:
+            pass
+    _execute("DELETE FROM clients WHERE id = %s", (client_id,))
 
 
 def _recompute_demo_client_totals(client_id: int):
@@ -855,6 +918,73 @@ def ensure_new_feature_tables():
         except Exception:
             return False
 
+    # Base tables (init all required tables for Flask app)
+    _execute("""
+        CREATE TABLE IF NOT EXISTS clients (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) NULL,
+            industry VARCHAR(255) NULL,
+            web_store_url VARCHAR(500) NULL,
+            notes TEXT NULL,
+            customer_cluster VARCHAR(255) NULL,
+            status VARCHAR(50) DEFAULT 'Onboarded',
+            total_orders INT DEFAULT 0,
+            total_addresses_delivered INT DEFAULT 0,
+            total_order_amount DECIMAL(12,2) DEFAULT 0,
+            api_pdf BOOLEAN NOT NULL DEFAULT FALSE,
+            json_file BOOLEAN NOT NULL DEFAULT FALSE,
+            product_specs BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    """)
+
+    _execute("""
+        CREATE TABLE IF NOT EXISTS communication_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            client_id INT NOT NULL,
+            log_date DATE NOT NULL,
+            event TEXT NOT NULL,
+            FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        )
+    """)
+
+    _execute("""
+        CREATE TABLE IF NOT EXISTS sales_records (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            client_id INT NOT NULL,
+            sale_date DATE NOT NULL,
+            description TEXT NULL,
+            quantity INT DEFAULT 0,
+            amount DECIMAL(12,2) DEFAULT 0,
+            product VARCHAR(255) NULL,
+            FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        )
+    """)
+
+    _execute("""
+        CREATE TABLE IF NOT EXISTS deliveries (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            client_id INT NOT NULL,
+            country VARCHAR(255) NOT NULL,
+            address_count INT DEFAULT 1,
+            delivered_date DATE NULL,
+            FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        )
+    """)
+
+    _execute("""
+        CREATE TABLE IF NOT EXISTS system_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            log_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            message TEXT NOT NULL,
+            tags JSON NULL,
+            client_name VARCHAR(255) NULL,
+            industry VARCHAR(255) NULL
+        )
+    """)
+
     # 1. Extend clients table with API kit flags (if not present)
     for col in ("api_pdf", "json_file", "product_specs"):
         if not _column_exists("clients", col):
@@ -870,6 +1000,32 @@ def ensure_new_feature_tables():
         except Exception:
             pass
 
+    # customer_cluster (for Clustering tab)
+    if not _column_exists("clients", "customer_cluster"):
+        try:
+            _execute("ALTER TABLE clients ADD COLUMN customer_cluster VARCHAR(255) NULL")
+        except Exception:
+            pass
+
+    # status for client management
+    if not _column_exists("clients", "status"):
+        try:
+            _execute("ALTER TABLE clients ADD COLUMN status VARCHAR(50) DEFAULT 'Onboarded'")
+        except Exception:
+            pass
+
+    # timestamps if missing
+    if not _column_exists("clients", "created_at"):
+        try:
+            _execute("ALTER TABLE clients ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+    if not _column_exists("clients", "updated_at"):
+        try:
+            _execute("ALTER TABLE clients ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+
     # Sales product for pick + homepage product slicer
     if not _column_exists("sales_records", "product"):
         try:
@@ -877,17 +1033,25 @@ def ensure_new_feature_tables():
         except Exception:
             pass
 
-    # 2. Products master
+    # 2. Products master (with type/subtype for new UI)
     _execute("""
         CREATE TABLE IF NOT EXISTS products (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL UNIQUE,
             category VARCHAR(255) NULL,
+            subtype VARCHAR(255) NULL,
             specs JSON NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
     """)
+
+    # Ensure subtype column
+    if not _column_exists("products", "subtype"):
+        try:
+            _execute("ALTER TABLE products ADD COLUMN subtype VARCHAR(255) NULL")
+        except Exception:
+            pass
 
     # 3. client_products junction
     _execute("""
@@ -1038,7 +1202,7 @@ def search_products(name: str = None, category: str = None) -> list[dict]:
         raise
 
 
-def create_product(name: str, category: str = None, specs: list[str] = None) -> int:
+def create_product(name: str, category: str = None, specs: list[str] = None, subtype: str = None) -> int:
     specs_json = json.dumps(specs) if specs else None
     if _DEMO_MODE:
         new_id = max([p.get("id", 0) for p in _DEMO_PRODUCTS], default=0) + 1
@@ -1046,26 +1210,38 @@ def create_product(name: str, category: str = None, specs: list[str] = None) -> 
             "id": new_id,
             "name": name,
             "category": category,
+            "subtype": subtype,
             "specs": specs_json
         })
-        # Auto system log (also for demo)
         try:
             message = f"New product added: {name} (category: {category or '—'})"
             add_system_log(message, ["product"])
         except Exception:
             pass
         return new_id
-    template_id = _execute(
-        "INSERT INTO products (name, category, specs) VALUES (%s, %s, %s)",
-        (name, category, specs_json)
-    )
-    # Auto system log
+    # Try insert with subtype if column exists
+    try:
+        if subtype:
+            pid = _execute(
+                "INSERT INTO products (name, category, subtype, specs) VALUES (%s, %s, %s, %s)",
+                (name, category, subtype, specs_json)
+            )
+        else:
+            pid = _execute(
+                "INSERT INTO products (name, category, specs) VALUES (%s, %s, %s)",
+                (name, category, specs_json)
+            )
+    except Exception:
+        pid = _execute(
+            "INSERT INTO products (name, category, specs) VALUES (%s, %s, %s)",
+            (name, category, specs_json)
+        )
     try:
         message = f"New product added: {name} (category: {category or '—'})"
         add_system_log(message, ["product"])
     except Exception:
         pass
-    return template_id
+    return pid
 
 
 def get_client_products(client_id: int) -> list[dict]:
@@ -1094,7 +1270,7 @@ def set_client_products(client_id: int, product_ids: list[int]):
         _execute("INSERT INTO client_products (client_id, product_id) VALUES (%s, %s)", (client_id, pid))
 
 
-def save_client_json_send(client_id: int, uploaded_file, product: str = None, product_specs: list[str] = None) -> int:
+def save_client_json_send(client_id: int, uploaded_file, product: str = None, product_specs: list[str] = None, override_filename=None) -> int:
     """
     Saves the uploaded JSON file to disk, creates a json_templates entry,
     and records the send in client_json_sends.
@@ -1103,16 +1279,38 @@ def save_client_json_send(client_id: int, uploaded_file, product: str = None, pr
     """
     if not uploaded_file:
         return None
+    def _clean_part(s: str) -> str:
+        s = s.encode('ascii', 'ignore').decode('ascii')  # strip unicode chars like " 
+        s = s.strip().replace(" ", "_")
+        s = re.sub(r'[^\w\-.]', '_', s)  # replace invalid with _
+        s = re.sub(r'_+', '_', s)  # collapse multiple _
+        s = s.strip('_')
+        if not s:
+            s = "part"
+        return s
 
     # Derive pretty filename from product + specs (no spaces, joined by _ )
-    base = (product or "Template").strip().replace(" ", "_").replace("/", "-").replace("\\", "-")
+    # Use _clean_part for base too to remove invalid Windows filename chars like " ( ) etc.
+    base = _clean_part(product or "Template")
+    if not base:
+        base = "Template"
     spec_part = ""
     if product_specs:
-        cleaned = [s.strip().replace(" ", "_").replace("/", "-") for s in product_specs if s and s.strip()]
+        cleaned = [_clean_part(s) for s in product_specs if s and s.strip()]
         if cleaned:
             spec_part = "_" + "_".join(cleaned)
-    derived_name = f"{base}{spec_part}.json" if spec_part or base else uploaded_file.name
+    derived_name = f"{base}{spec_part}.json"
     # ensure .json suffix
+    if not derived_name.lower().endswith(".json"):
+        derived_name += ".json"
+    if derived_name == ".json":
+        derived_name = "template.json"
+    # Extra FS safety (werkzeug available via Flask)
+    try:
+        from werkzeug.utils import secure_filename
+        derived_name = secure_filename(derived_name) or "template.json"
+    except Exception:
+        pass
     if not derived_name.lower().endswith(".json"):
         derived_name += ".json"
 
@@ -1148,10 +1346,12 @@ def save_client_json_send(client_id: int, uploaded_file, product: str = None, pr
 
     try:
         # Use derived (product+specs) name for stored file + template record
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
         save_path = os.path.join(UPLOAD_DIR, derived_name)
 
         with open(save_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+            uploaded_file.stream.seek(0)
+            f.write(uploaded_file.stream.read())
 
         specs_json = json.dumps(product_specs) if product_specs else None
 
@@ -1220,7 +1420,8 @@ def get_client_sent_jsons(client_id: int) -> list[dict]:
                 "template_name": jt.get("name"),
                 "file_path": jt.get("file_path"),
                 "json_template_id": s.get("json_template_id"),
-                "client_name": cl.get("name")
+                "client_name": cl.get("name"),
+                "is_demo": True   # flag for cloud/demo downloads
             })
         return res
     try:
@@ -1619,6 +1820,255 @@ def get_sales_details_by_countries_and_products(selected_countries: list[str] | 
     except Exception as e:
         if "1146" in str(e) or "doesn't exist" in str(e).lower():
             return []
+        raise
+
+
+# ============================================================
+# ANALYTICS: Key Metrics (Average Response Time + Conversion Time to first JSON API Template)
+# ============================================================
+
+def _parse_date(d: Any) -> Any:
+    """Return a date object from 'YYYY-MM-DD' string or date/datetime; None on failure."""
+    if d is None:
+        return None
+    if hasattr(d, "date"):
+        try:
+            return d.date()
+        except Exception:
+            pass
+    s = str(d).strip()
+    if not s:
+        return None
+    # take just the date part if timestamp
+    s = s[:10]
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def get_key_metrics() -> dict:
+    """
+    Core analytics for the system.
+
+    Response Time: average days between consecutive Communication Logs (clients with 2+ logs).
+    Conversion Time: days from a client's FIRST communication log date ("first request") to their FIRST client_json_sends.sent_date (JSON API template delivery).
+    Both work in DEMO and real MySQL. Returns safe defaults if tables are missing.
+    """
+    if _DEMO_MODE:
+        from collections import defaultdict
+        from datetime import date as _date
+
+        # comms per client
+        comms_by_c: dict[int, list] = defaultdict(list)
+        for c in _DEMO_COMMS:
+            cid = c.get("client_id")
+            dt = _parse_date(c.get("log_date"))
+            if cid and dt:
+                comms_by_c[cid].append(dt)
+
+        # json sends per client (first = min sent_date)
+        json_by_c: dict[int, list] = defaultdict(list)
+        for s in _DEMO_CLIENT_JSON_SENDS:
+            cid = s.get("client_id")
+            dt = _parse_date(s.get("sent_date"))
+            if cid and dt:
+                json_by_c[cid].append(dt)
+
+        clients = _DEMO_CLIENTS
+        per_client = []
+        conversion_deltas = []
+        response_deltas = []  # pooled inter-comm deltas
+
+        for c in clients:
+            cid = c.get("id")
+            name = c.get("name") or f"Client #{cid}"
+            ind = c.get("industry")
+            c_comms = sorted(set(comms_by_c.get(cid, [])))
+            c_jsons = sorted(json_by_c.get(cid, []))
+
+            first_comm = c_comms[0] if c_comms else None
+            first_json = c_jsons[0] if c_jsons else None
+            conv_days = (first_json - first_comm).days if (first_comm and first_json and first_json >= first_comm) else None
+            if conv_days is not None:
+                conversion_deltas.append(conv_days)
+
+            num_comms = len(c_comms)
+            avg_inter = None
+            if num_comms >= 2:
+                deltas = [(c_comms[i+1] - c_comms[i]).days for i in range(num_comms-1) if (c_comms[i+1] - c_comms[i]).days >= 0]
+                if deltas:
+                    avg_inter = round(sum(deltas) / len(deltas), 1)
+                    response_deltas.extend(deltas)
+
+            per_client.append({
+                "Client ID": cid,
+                "Client Name": name,
+                "Industry": ind or "—",
+                "Cluster Label": c.get("customer_cluster") or "—",
+                "First Comm Date": str(first_comm) if first_comm else "—",
+                "First JSON Sent": str(first_json) if first_json else "—",
+                "Conversion Days (to 1st JSON)": conv_days if conv_days is not None else "—",
+                "# Comms": num_comms,
+                "Avg Days Between Comms": avg_inter if avg_inter is not None else "—",
+                "Has JSON Template": "Yes" if first_json else "No",
+            })
+
+        avg_conv = round(sum(conversion_deltas) / len(conversion_deltas), 1) if conversion_deltas else None
+        avg_resp = round(sum(response_deltas) / len(response_deltas), 1) if response_deltas else None
+
+        # Build grouped averages for clustering by Industry or Cluster Label (customer label)
+        from collections import defaultdict
+        def _agg_group(rows, gkey):
+            gs = defaultdict(list)
+            for r in rows:
+                gval = r.get(gkey) or "—"
+                gs[gval].append(r)
+            res = {}
+            for g, rs in gs.items():
+                convs = [x.get("Conversion Days (to 1st JSON)") for x in rs if isinstance(x.get("Conversion Days (to 1st JSON)"), (int, float))]
+                resps = [x.get("Avg Days Between Comms") for x in rs if isinstance(x.get("Avg Days Between Comms"), (int, float))]
+                res[g] = {
+                    "client_count": len(rs),
+                    "avg_conversion_days": round(sum(convs) / len(convs), 1) if convs else None,
+                    "avg_response_days": round(sum(resps) / len(resps), 1) if resps else None,
+                    "with_conversion": len(convs),
+                }
+            return res
+
+        return {
+            "summary": {
+                "avg_conversion_time_days": avg_conv,
+                "num_clients_with_json_template": len(conversion_deltas),
+                "avg_response_time_days": avg_resp,
+                "num_clients_with_multiple_comms": sum(1 for c in per_client if isinstance(c.get("# Comms"), int) and c["# Comms"] >= 2),
+                "total_clients": len(clients),
+            },
+            "per_client": per_client,
+            "grouped": {
+                "by_industry": _agg_group(per_client, "Industry"),
+                "by_customer_cluster": _agg_group(per_client, "Cluster Label"),
+            },
+        }
+
+    # Real MySQL
+    try:
+        from collections import defaultdict
+
+        clients = fetch_clients() or []
+        if not clients:
+            return {"summary": {"avg_conversion_time_days": None, "num_clients_with_json_template": 0, "avg_response_time_days": None, "num_clients_with_multiple_comms": 0, "total_clients": 0}, "per_client": [], "grouped": {"by_industry": {}, "by_customer_cluster": {}}}
+
+        # Fetch all comms
+        try:
+            comm_rows = _query("SELECT client_id, log_date FROM communication_logs") or []
+        except Exception as e:
+            if "1146" in str(e) or "doesn't exist" in str(e).lower():
+                comm_rows = []
+            else:
+                comm_rows = []
+
+        # Fetch all json sends
+        try:
+            json_rows = _query("SELECT client_id, sent_date FROM client_json_sends") or []
+        except Exception as e:
+            if "1146" in str(e) or "doesn't exist" in str(e).lower():
+                json_rows = []
+            else:
+                json_rows = []
+
+        comms_by_c: dict[int, list] = defaultdict(list)
+        for r in comm_rows:
+            cid = r.get("client_id")
+            dt = _parse_date(r.get("log_date"))
+            if cid and dt:
+                comms_by_c[cid].append(dt)
+
+        json_by_c: dict[int, list] = defaultdict(list)
+        for r in json_rows:
+            cid = r.get("client_id")
+            dt = _parse_date(r.get("sent_date"))
+            if cid and dt:
+                json_by_c[cid].append(dt)
+
+        per_client = []
+        conversion_deltas = []
+        response_deltas = []
+
+        for c in clients:
+            cid = c.get("id")
+            name = c.get("name") or f"Client #{cid}"
+            ind = c.get("industry")
+            c_comms = sorted(set(comms_by_c.get(cid, [])))
+            c_jsons = sorted(json_by_c.get(cid, []))
+
+            first_comm = c_comms[0] if c_comms else None
+            first_json = c_jsons[0] if c_jsons else None
+            conv_days = (first_json - first_comm).days if (first_comm and first_json and first_json >= first_comm) else None
+            if conv_days is not None:
+                conversion_deltas.append(conv_days)
+
+            num_comms = len(c_comms)
+            avg_inter = None
+            if num_comms >= 2:
+                deltas = [(c_comms[i+1] - c_comms[i]).days for i in range(num_comms-1) if (c_comms[i+1] - c_comms[i]).days >= 0]
+                if deltas:
+                    avg_inter = round(sum(deltas) / len(deltas), 1)
+                    response_deltas.extend(deltas)
+
+            per_client.append({
+                "Client ID": cid,
+                "Client Name": name,
+                "Industry": ind or "—",
+                "Cluster Label": c.get("customer_cluster") or "—",
+                "First Comm Date": str(first_comm) if first_comm else "—",
+                "First JSON Sent": str(first_json) if first_json else "—",
+                "Conversion Days (to 1st JSON)": conv_days if conv_days is not None else "—",
+                "# Comms": num_comms,
+                "Avg Days Between Comms": avg_inter if avg_inter is not None else "—",
+                "Has JSON Template": "Yes" if first_json else "No",
+            })
+
+        avg_conv = round(sum(conversion_deltas) / len(conversion_deltas), 1) if conversion_deltas else None
+        avg_resp = round(sum(response_deltas) / len(response_deltas), 1) if response_deltas else None
+
+        # Build grouped averages for clustering by Industry or Cluster Label (customer label)
+        from collections import defaultdict
+        def _agg_group(rows, gkey):
+            gs = defaultdict(list)
+            for r in rows:
+                gval = r.get(gkey) or "—"
+                gs[gval].append(r)
+            res = {}
+            for g, rs in gs.items():
+                convs = [x.get("Conversion Days (to 1st JSON)") for x in rs if isinstance(x.get("Conversion Days (to 1st JSON)"), (int, float))]
+                resps = [x.get("Avg Days Between Comms") for x in rs if isinstance(x.get("Avg Days Between Comms"), (int, float))]
+                res[g] = {
+                    "client_count": len(rs),
+                    "avg_conversion_days": round(sum(convs) / len(convs), 1) if convs else None,
+                    "avg_response_days": round(sum(resps) / len(resps), 1) if resps else None,
+                    "with_conversion": len(convs),
+                }
+            return res
+
+        return {
+            "summary": {
+                "avg_conversion_time_days": avg_conv,
+                "num_clients_with_json_template": len(conversion_deltas),
+                "avg_response_time_days": avg_resp,
+                "num_clients_with_multiple_comms": sum(1 for c in per_client if isinstance(c.get("# Comms"), int) and c["# Comms"] >= 2),
+                "total_clients": len(clients),
+            },
+            "per_client": per_client,
+            "grouped": {
+                "by_industry": _agg_group(per_client, "Industry"),
+                "by_customer_cluster": _agg_group(per_client, "Cluster Label"),
+            },
+        }
+    except Exception as e:
+        if "1146" in str(e) or "doesn't exist" in str(e).lower():
+            return {"summary": {"avg_conversion_time_days": None, "num_clients_with_json_template": 0, "avg_response_time_days": None, "num_clients_with_multiple_comms": 0, "total_clients": len(fetch_clients() or [])}, "per_client": [], "grouped": {"by_industry": {}, "by_customer_cluster": {}}}
+        # surface other errors to caller (UI will show)
         raise
 
 

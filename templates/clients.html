@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+<div>
+  <!-- Header -->
+  <div class="flex items-end justify-between mb-6">
+    <div>
+      <h1 class="text-3xl font-semibold tracking-tight">Clients <span class="text-slate-400 font-normal text-2xl">({{ total }})</span></h1>
+      <p class="text-slate-500 mt-1">Manage your customer accounts</p>
+    </div>
+
+    <button onclick="document.getElementById('add-client-modal').classList.remove('hidden')"
+            class="inline-flex items-center gap-x-2 px-4 py-2.5 bg-slate-900 hover:bg-black text-white text-sm font-medium rounded-2xl transition">
+      <span>+ Add New Client</span>
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <form method="get" class="flex flex-wrap gap-2 flex-1">
+      <input type="text" name="q" value="{{ current_q }}" placeholder="Search name, email, industry..."
+             class="flex-1 min-w-[220px] px-4 py-2 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-slate-400">
+      
+      <select name="industry" class="px-4 py-2 bg-white border border-slate-200 rounded-2xl text-sm">
+        <option value="">All Industries</option>
+        {% for ind in industries %}
+          <option value="{{ ind }}" {% if current_industry == ind %}selected{% endif %}>{{ ind }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="cluster" class="px-4 py-2 bg-white border border-slate-200 rounded-2xl text-sm">
+        <option value="">All Clusters</option>
+        {% for cl in clusters %}
+          <option value="{{ cl }}" {% if current_cluster == cl %}selected{% endif %}>{{ cl }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="submit" class="px-5 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-2xl text-sm">Filter</button>
+      <a href="{{ url_for('clients_page') }}" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-800">Clear</a>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+    <table id="clients-table" class="w-full text-sm">
+      <thead class="bg-slate-50 border-b border-slate-200">
+        <tr>
+          <th data-sort class="text-left px-6 py-4 font-medium text-slate-500">Name</th>
+          <th data-sort class="text-left px-6 py-4 font-medium text-slate-500">Join Date</th>
+          <th data-sort class="text-left px-6 py-4 font-medium text-slate-500">Last Edited</th>
+          <th data-sort class="text-left px-6 py-4 font-medium text-slate-500">Industry</th>
+          <th data-sort class="text-left px-6 py-4 font-medium text-slate-500">Cluster</th>
+          <th class="text-left px-6 py-4 font-medium text-slate-500">Status</th>
+          <th class="w-12"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for c in clients %}
+        <tr class="table-row cursor-pointer" onclick="window.location='{{ url_for('client_profile', client_id=c.id) }}'">
+          <td class="px-6 py-4">
+            <div class="font-medium">{{ c.name }}</div>
+            <div class="text-xs text-slate-400">{{ c.email or '—' }}</div>
+          </td>
+          <td class="px-6 py-4 text-slate-500">
+            {{ c.created_at or '—' }}
+          </td>
+          <td class="px-6 py-4 text-slate-500">
+            {{ c.updated_at or '—' }}
+          </td>
+          <td class="px-6 py-4 text-slate-600">{{ c.industry or '—' }}</td>
+          <td class="px-6 py-4">
+            <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">{{ c.customer_cluster or '—' }}</span>
+          </td>
+          <td class="px-6 py-4">
+            {% set st = c.status or 'Onboarded' %}
+            <span class="badge {{ status_colors.get(st, 'bg-slate-100 text-slate-600') }}">{{ st }}</span>
+          </td>
+          <td class="px-6 py-4 text-right" onclick="event.stopImmediatePropagation()">
+            <form method="post" action="{{ url_for('delete_client_route', client_id=c.id) }}" 
+                  onsubmit="return confirm('Delete this client?')">
+              <button type="submit" class="text-red-400 hover:text-red-600 text-xs px-2 py-1">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="px-6 py-12 text-center text-slate-400">No clients found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add Client Modal -->
+  <div id="add-client-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div class="bg-white w-full max-w-lg mx-4 rounded-3xl shadow-xl p-6 modal">
+      <div class="flex justify-between items-center mb-5">
+        <div class="font-semibold text-lg">Add New Client</div>
+        <button onclick="document.getElementById('add-client-modal').classList.add('hidden')" class="text-2xl leading-none text-slate-400 hover:text-slate-600">&times;</button>
+      </div>
+
+      <form method="post" action="{{ url_for('add_client') }}">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">Name *</label>
+            <input name="name" required class="w-full px-4 py-2.5 border border-slate-200 rounded-2xl text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">Email *</label>
+            <input name="email" type="email" required class="w-full px-4 py-2.5 border border-slate-200 rounded-2xl text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs text-slate-500 mb-1">Industry</label>
+              <input name="industry" class="w-full px-4 py-2.5 border border-slate-200 rounded-2xl text-sm">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 mb-1">Status</label>
+              <select name="status" class="w-full px-4 py-2.5 border border-slate-200 rounded-2xl text-sm">
+                <option>Onboarded</option>
+                <option>Active</option>
+                <option>Requested</option>
+                <option>Need help</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">Web Store URL</label>
+            <input name="web_store_url" placeholder="https://..." class="w-full px-4 py-2.5 border border-slate-200 rounded-2xl text-sm">
+          </div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <button type="button" onclick="document.getElementById('add-client-modal').classList.add('hidden')"
+                  class="flex-1 py-2.5 rounded-2xl border text-sm">Cancel</button>
+          <button type="submit" class="flex-1 py-2.5 bg-slate-900 text-white rounded-2xl text-sm font-medium">Create Client</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Client side search + sort
+  filterTable('search-input', 'clients-table'); // if we add an extra input later
+  makeSortable('clients-table');
+</script>
+{% endblock %}

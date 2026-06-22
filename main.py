@@ -2,21 +2,24 @@
 main.py
 Client Profile Management System
 
-How to run:
+How to run locally:
     streamlit run main.py
+
+Cloud deployment (Streamlit Community Cloud):
+    - Deploy directly from the GitHub repo (see instructions in chat or README)
+    - Must set secrets: USE_SAMPLE_DATA=true + DASHBOARD_PASSWORD
+    - Runs in pure demo mode (no MySQL required)
 
 Features:
 - Fully English interface (titles, buttons, labels)
 - Simple password login (from .env DASHBOARD_PASSWORD)
-- 4 main tabs: Dashboard / Client Management (CRUD) / CSV Import/Export / Client Clustering
-- Dedicated client profile page (open via ?client_id= in URL or button) -- independent full view for comm logs / sales / deliveries / web_store_url / map
-- Full CRUD + real-time search and filtering (web_store_url supported)
-- CSV import/export with web_store_url
-- Per-client world maps + global dispatch on dashboard
-- System logs query + export on Dashboard
-- Detailed error handling + pymysql lazy for demo
-- Easy "Add New Client" (name + email + industry + web store url)
-- Real MySQL or pure demo mode (USE_SAMPLE_DATA)
+- Tabs: Dashboard / Analytics (key metrics) / Client Management (CRUD) / Products / JSON Templates / CSV Import/Export / Client Clustering
+- Dedicated client profile page (open via ?client_id= in URL or button)
+- Full CRUD + real-time search (API kit flags + products)
+- Per-client + global maps, product slicer on sales details (exportable)
+- System logs query + export
+- NEW: Analytics tab with Average Response Time + Conversion Time (first comm "request" → first JSON API template send)
+- Real MySQL (auto schema init) or pure demo mode (USE_SAMPLE_DATA=true for cloud)
 
 Notes (Streamlit rerun model):
 - Important state lives in st.session_state
@@ -150,6 +153,15 @@ def load_clients(force: bool = False) -> list[dict[str, Any]]:
 def refresh_data() -> None:
     """Helper for refresh buttons"""
     load_clients(force=True)
+    # Re-init key metrics cache when data is refreshed
+    try:
+        st.session_state["key_metrics"] = database.get_key_metrics()
+    except Exception:
+        st.session_state["key_metrics"] = {
+            "summary": {},
+            "per_client": [],
+            "grouped": {"by_industry": {}, "by_customer_cluster": {}}
+        }
     st.toast("Data reloaded")
 
 
@@ -283,6 +295,19 @@ def format_last_edited(c: dict) -> str:
     return str(le)
 
 
+def _get_demo_json_bytes(product: str = None, specs: list = None) -> bytes:
+    """Generate a small downloadable JSON for demo / Streamlit Cloud mode
+    (no real files persist on disk in cloud)."""
+    content = {
+        "demo": True,
+        "product": product or "Demo Product",
+        "specs": specs or [],
+        "note": "This is a demo JSON template (generated on the fly for Streamlit Cloud)",
+        "generated": datetime.now().isoformat()
+    }
+    return json.dumps(content, indent=2).encode("utf-8")
+
+
 # ============================================================
 # Dedicated Client Profile Page (independent view, URL-driven via ?client_id=)
 # Replaces the old "edit at bottom of CRUD tab". Selecting a client opens this full page.
@@ -378,6 +403,7 @@ def render_client_profile_page(client_id: int, new_features_ready: bool = None) 
             b_email = st.text_input("Email (optional)", value=prof.get("email") or "")
             b_ind = st.text_input("Industry (optional)", value=prof.get("industry") or "")
             b_url = st.text_input("Web Store URL (optional, full https://...)", value=prof.get("web_store_url") or "")
+            b_cluster = st.text_input("Customer Label / Cluster (for Analytics grouping)", value=prof.get("customer_cluster") or "")
             if st.form_submit_button("Save Basic Info", type="primary"):
                 try:
                     payload = {
@@ -385,6 +411,7 @@ def render_client_profile_page(client_id: int, new_features_ready: bool = None) 
                         "email": b_email.strip() or None,
                         "industry": b_ind.strip() or None,
                         "web_store_url": b_url.strip() or None,
+                        "customer_cluster": b_cluster.strip() or None,
                     }
                     database.update_client(client_id, payload)
                     st.success("Basic info updated.")
@@ -610,7 +637,16 @@ def render_client_profile_page(client_id: int, new_features_ready: bool = None) 
                     st.write(s.get("client_name") or name)
                 with row[2]:
                     fname = s.get("template_name") or "template.json"
-                    if s.get("file_path") and os.path.exists(s.get("file_path", "")):
+                    if s.get("is_demo") or (s.get("file_path") and s.get("file_path", "").startswith("DEMO:")):
+                        # Demo / Streamlit Cloud: generate on-the-fly JSON so download works
+                        demo_bytes = _get_demo_json_bytes(s.get("product"), s.get("product_specs"))
+                        st.download_button(
+                            label=f"Download {fname}",
+                            data=demo_bytes,
+                            file_name=fname,
+                            key=f"dl_{s.get('id')}_{client_id}"
+                        )
+                    elif s.get("file_path") and os.path.exists(s.get("file_path", "")):
                         try:
                             with open(s["file_path"], "rb") as f:
                                 file_bytes = f.read()
@@ -664,6 +700,21 @@ def main() -> None:
             "Then click 'Refresh All Data' in the sidebar or reload the page.\n\n"
             "Until then, the basic CRUD, client profiles, logs, etc. should still work."
         )
+
+    # ============================================================
+    # INIT get_key_metrics early (Analytics: avg response time, conversion time to first JSON,
+    # plus grouped by industry + customer_cluster labels). This ensures the function + any
+    # underlying table guards run at startup (like new_features_ready) and populates cache
+    # for the Analytics tab + any future global use. Safe / cheap in demo.
+    # ============================================================
+    try:
+        st.session_state["key_metrics"] = database.get_key_metrics()
+    except Exception:
+        st.session_state["key_metrics"] = {
+            "summary": {},
+            "per_client": [],
+            "grouped": {"by_industry": {}, "by_customer_cluster": {}}
+        }
 
     # ============================================================
     # Dedicated profile page routing via URL query param (e.g. ?client_id=2)
@@ -730,7 +781,8 @@ def main() -> None:
                         seed_fn()
                 st.session_state.clients_cache = []
                 refresh_data()
-                st.success("Done. Database cleared and rich test data loaded (multiple overlapping products/clients, sales tagged with products, deliveries in 7+ countries, sample JSON templates with pretty renamed files ready for download, etc.). Test the product slicer on Dashboard, sales product picker on any profile, Products tab flat rows, JSON tab, and profile JSON history.")
+                # get_key_metrics cache is refreshed inside refresh_data (includes fresh comms + json sends for conversion/response + clusters)
+                st.success("Done. Database cleared and rich test data loaded (multiple overlapping products/clients, sales tagged with products, deliveries in 7+ countries, sample JSON templates with pretty renamed files ready for download, etc.). Test the product slicer on Dashboard, sales product picker on any profile, Products tab flat rows, JSON tab, profile JSON history, and the Analytics tab (industry + customer label clustering of avg times).")
                 st.rerun()
             except Exception as e:
                 st.error(f"Clear/seed failed: {e}")
@@ -777,6 +829,7 @@ def main() -> None:
                 database.reset_demo_data()
                 st.session_state.clients_cache = []
                 refresh_data()
+                # metrics re-init happens inside refresh_data
                 st.rerun()
 
     # Clients already loaded above for the early new_features_ready check.
@@ -784,8 +837,9 @@ def main() -> None:
     # ============================================================
     # Tabs
     # ============================================================
-    tab_dash, tab_crud, tab_products, tab_json, tab_csv, tab_cluster = st.tabs([
+    tab_dash, tab_analytics, tab_crud, tab_products, tab_json, tab_csv, tab_cluster = st.tabs([
         "Dashboard",
+        "Analytics",
         "Client Management (CRUD)",
         "Products",
         "JSON Templates",
@@ -932,6 +986,116 @@ def main() -> None:
             total_amount = sum(float(c.get("total_order_amount", 0)) for c in clients)
             c3.metric("Total Order Value ($)", f"{total_amount:,.2f}")
 
+            # Quick peek at the key analytics (conversion/response) on Dashboard for visibility
+            # Uses the early-inited key_metrics cache when available
+            try:
+                _m = st.session_state.get("key_metrics") or database.get_key_metrics()
+                s = _m.get("summary", {})
+                ac = s.get("avg_conversion_time_days")
+                ar = s.get("avg_response_time_days")
+                nj = s.get("num_clients_with_json_template", 0)
+                if ac is not None or ar is not None:
+                    st.markdown("### Key Metrics (see Analytics tab for full breakdown)")
+                    k1, k2, k3 = st.columns(3)
+                    k1.metric("Avg Conversion (days to 1st JSON)", f"{ac:.1f}" if ac is not None else "—")
+                    k2.metric("Avg Response / Engagement (days)", f"{ar:.1f}" if ar is not None else "—")
+                    k3.metric("Clients with JSON Template", f"{nj} / {s.get('total_clients', len(clients))}")
+            except Exception:
+                pass
+
+    # ============================================================
+    # Analytics - Key Metrics (cluster by industry or customer label + avg times per group)
+    # ============================================================
+    with tab_analytics:
+        st.subheader("Analytics")
+
+        # Prefer the early-initialized cache (set at startup + on every refresh/seed)
+        metrics = st.session_state.get("key_metrics") or {}
+        if not metrics or not metrics.get("per_client"):
+            try:
+                metrics = database.get_key_metrics()
+                st.session_state["key_metrics"] = metrics
+            except Exception as e:
+                metrics = {"summary": {}, "per_client": [], "grouped": {"by_industry": {}, "by_customer_cluster": {}}}
+                st.error(f"Could not compute metrics: {e}")
+
+        summ = metrics.get("summary", {})
+        per_client_rows = metrics.get("per_client", []) or []
+        grouped = metrics.get("grouped", {}) or {}
+
+        # Headline overall
+        colm1, colm2, colm3, colm4 = st.columns(4)
+        with colm1:
+            ac = summ.get("avg_conversion_time_days")
+            st.metric("Avg Conversion (to 1st JSON)", f"{ac:.1f} days" if isinstance(ac, (int, float)) else "—")
+        with colm2:
+            ar = summ.get("avg_response_time_days")
+            st.metric("Avg Response Time", f"{ar:.1f} days" if isinstance(ar, (int, float)) else "—")
+        with colm3:
+            nj = summ.get("num_clients_with_json_template", 0)
+            totc = summ.get("total_clients", len(clients))
+            st.metric("Clients with JSON Template", f"{nj} / {totc}")
+        with colm4:
+            nresp = summ.get("num_clients_with_multiple_comms", 0)
+            st.metric("Clients w/ 2+ Comms", f"{nresp}")
+
+        st.divider()
+
+        # Cluster / group selector + grouped avgs
+        group_choice = st.radio(
+            "Cluster / Group by",
+            options=["None (overall)", "Industry", "Customer Label"],
+            horizontal=True,
+            key="analytics_group_by"
+        )
+
+        if group_choice == "Industry":
+            gdata = grouped.get("by_industry", {})
+            title = "Averages by Industry"
+        elif group_choice == "Customer Label":
+            gdata = grouped.get("by_customer_cluster", {})
+            title = "Averages by Customer Label (cluster)"
+        else:
+            gdata = {}
+            title = ""
+
+        if gdata:
+            st.markdown(f"**{title}**")
+            g_rows = []
+            for gname, vals in gdata.items():
+                g_rows.append({
+                    "Group": gname,
+                    "Clients": vals.get("client_count", 0),
+                    "Avg Conversion (days)": vals.get("avg_conversion_days"),
+                    "Avg Response (days)": vals.get("avg_response_days"),
+                    "With Conversion": vals.get("with_conversion", 0),
+                })
+            if g_rows:
+                st.dataframe(pd.DataFrame(g_rows), use_container_width=True, hide_index=True)
+        elif group_choice != "None (overall)":
+            st.caption("No groups with data for the selected clustering.")
+
+        st.divider()
+
+        # Detailed per-client (now includes Cluster Label attribute)
+        if per_client_rows:
+            df_metrics = pd.DataFrame(per_client_rows)
+            st.dataframe(df_metrics, use_container_width=True, hide_index=True)
+
+            try:
+                csv_m = df_metrics.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    "Export Metrics to CSV",
+                    data=csv_m,
+                    file_name=f"key_metrics_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    key="export_analytics_csv"
+                )
+            except Exception:
+                pass
+        else:
+            st.caption("No data. Use profile pages to add comms + JSON sends, or load fresh test data.")
+
     # ============================================================
     # 2. Client Management (CRUD)
     # ============================================================
@@ -954,6 +1118,7 @@ def main() -> None:
                 new_email = st.text_input("Email (optional)", placeholder="e.g. contact@example.com")
                 new_industry = st.text_input("Industry (optional)", placeholder="e.g. Technology, Retail, Healthcare")
                 new_web_url = st.text_input("Web Store URL (optional)", placeholder="https://client.example.com/store")
+                new_cluster = st.text_input("Customer Label / Cluster (optional, for Analytics grouping)", placeholder="e.g. Strategic, Volume Packaging")
 
                 st.markdown("**API Kit flags (for filtering):**")
                 ca1, ca2, ca3 = st.columns(3)
@@ -991,6 +1156,7 @@ def main() -> None:
                                 "total_orders": 0,
                                 "total_addresses_delivered": 0,
                                 "total_order_amount": 0.0,
+                                "customer_cluster": new_cluster.strip() or None,
                             }
                             new_id = database.insert_client(data)
                             # Assign selected existing products (if any)
@@ -1058,6 +1224,7 @@ def main() -> None:
                     "Name": c.get("name"),
                     "Email": c.get("email"),
                     "Industry": c.get("industry"),
+                    "Cluster Label": c.get("customer_cluster") or "—",
                     "API PDF": bool(c.get("api_pdf")),
                     "JSON File": bool(c.get("json_file")),
                     "Product Specs": bool(c.get("product_specs")),
@@ -1078,6 +1245,7 @@ def main() -> None:
                         "Name": c.get("name"),
                         "Email": c.get("email"),
                         "Industry": c.get("industry"),
+                        "Cluster Label": c.get("customer_cluster"),
                         "Web Store URL": c.get("web_store_url"),
                         "Total Orders": c.get("total_orders", 0),
                         "Addresses Delivered": c.get("total_addresses_delivered", 0),
@@ -1116,7 +1284,7 @@ def main() -> None:
             if selected_client:
                 client_id = selected_client.get("id")
                 with st.expander("Quick Snapshot", expanded=False):
-                    snapshot = {k: v for k, v in selected_client.items() if k in ("id", "name", "email", "industry", "web_store_url", "total_orders", "total_addresses_delivered", "total_order_amount")}
+                    snapshot = {k: v for k, v in selected_client.items() if k in ("id", "name", "email", "industry", "customer_cluster", "web_store_url", "total_orders", "total_addresses_delivered", "total_order_amount")}
                     snapshot["api_kit"] = {
                         "pdf": bool(selected_client.get("api_pdf")),
                         "json": bool(selected_client.get("json_file")),
@@ -1157,6 +1325,7 @@ def main() -> None:
             email = st.text_input("Email (optional)", value=editing_client.get("email", "") if editing_client else "", placeholder="contact@example.com")
             industry = st.text_input("Industry", value=editing_client.get("industry", "") if editing_client else "", placeholder="Technology, Retail, Healthcare...")
             web_url = st.text_input("Web Store URL (optional)", value=editing_client.get("web_store_url", "") if editing_client else "", placeholder="https://...")
+            cluster_label = st.text_input("Customer Label / Cluster (for Analytics grouping)", value=editing_client.get("customer_cluster", "") if editing_client else "", placeholder="e.g. Strategic")
 
             st.markdown("**API Kit flags:**")
             ea1, ea2, ea3 = st.columns(3)
@@ -1191,6 +1360,7 @@ def main() -> None:
                         "api_pdf": e_api_pdf,
                         "json_file": e_json,
                         "product_specs": e_prod_specs,
+                        "customer_cluster": cluster_label.strip() or None,
                     }
                     if is_edit:
                         cid = st.session_state.get("edit_client_id")
@@ -1418,6 +1588,10 @@ def main() -> None:
                             with row[2]:
                                 jn = info.get("json_name") or "file.json"
                                 jp = info.get("json_path")
+                                # Support demo/cloud generated downloads
+                                is_demo_entry = (jp and str(jp).startswith("DEMO:")) or any(
+                                    u.get("is_demo") for u in (database.get_json_template_usage(0) or [])  # rough check
+                                )
                                 if jp and os.path.exists(str(jp)):
                                     try:
                                         with open(jp, "rb") as f:
@@ -1426,7 +1600,9 @@ def main() -> None:
                                     except Exception:
                                         st.caption(f"{jn} (file err)")
                                 else:
-                                    st.caption(jn)
+                                    # Fallback for demo / cloud: always offer a generated JSON
+                                    demo_bytes = _get_demo_json_bytes(sel_jprod, sp_key if isinstance(sp_key, (list, tuple)) else None)
+                                    st.download_button(jn, data=demo_bytes, file_name=jn, key=f"jtab_dl_{sel_jprod}_{hash(sp_key)}")
                             with row[3]:
                                 clist = ", ".join(sorted(info["clients"])) if info["clients"] else "—"
                                 st.write(clist)

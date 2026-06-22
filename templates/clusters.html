@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+<div>
+  <div class="flex justify-between items-end mb-6">
+    <div>
+      <h1 class="text-3xl font-semibold tracking-tight">Clusters <span class="text-slate-400 font-normal">({{ total_clusters }})</span></h1>
+      <p class="text-sm text-slate-500 mt-1">Total clients across clusters: {{ total_clients }}</p>
+    </div>
+    <button onclick="document.getElementById('add-cluster-modal').classList.remove('hidden')"
+            class="px-4 py-2.5 bg-slate-900 text-sm rounded-2xl text-white">+ Add New Cluster</button>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+    {% for cl in clusters %}
+    <div class="card bg-white border border-slate-200 rounded-3xl p-5">
+      <div class="flex justify-between">
+        <div>
+          <div class="font-semibold text-lg">{{ cl.name }}</div>
+          <div class="text-xs text-slate-400">{{ cl.count }} members</div>
+        </div>
+
+        <!-- 3-dot menu -->
+        <div class="relative group">
+          <button class="px-2 py-1 text-lg leading-none text-slate-400 hover:text-slate-600">⋯</button>
+          <div class="absolute right-0 mt-1 w-44 bg-white border border-slate-200 shadow-xl rounded-2xl py-1 hidden group-hover:block z-10">
+            <a href="{{ url_for('clients_page') }}?cluster={{ cl.name }}" class="block px-4 py-1.5 text-sm hover:bg-slate-50">View clients</a>
+            
+            <form method="post" action="{{ url_for('delete_cluster', cluster_name=cl.name) }}" class="border-t mt-1 pt-1" onsubmit="return confirm('Unassign all clients from this cluster?')">
+              <button class="w-full text-left px-4 py-1.5 text-sm text-red-600 hover:bg-red-50">Delete cluster</button>
+            </form>
+
+            <!-- Assign clients form trigger -->
+            <button onclick="showAssignModal('{{ cl.name|replace("'", "\\'") }}', {{ cl.members|map(attribute='id')|list|tojson }})"
+                    class="w-full text-left px-4 py-1.5 text-sm hover:bg-slate-50">Edit — Add clients</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Members preview -->
+      <div class="mt-4 flex flex-wrap gap-1">
+        {% for name in cl.preview %}
+          <span class="text-[10px] bg-slate-100 px-2 py-px rounded">{{ name }}</span>
+        {% endfor %}
+        {% if cl.overflow %}
+          <span class="text-[10px] px-2 py-px text-slate-400">+{{ cl.overflow }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="col-span-full text-slate-400">No clusters yet.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Add cluster modal -->
+<div id="add-cluster-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white w-full max-w-sm mx-4 p-6 rounded-3xl modal">
+    <div class="font-semibold mb-4">Create New Cluster</div>
+    <form method="post" action="{{ url_for('add_cluster') }}">
+      <input name="name" required placeholder="Cluster name (e.g. Strategic Accounts)" class="w-full border px-4 py-2.5 rounded-2xl">
+      <div class="mt-4 flex gap-2">
+        <button type="button" onclick="document.getElementById('add-cluster-modal').classList.add('hidden')" class="flex-1 py-2 border rounded-2xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2 bg-slate-900 text-white rounded-2xl">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Assign clients to cluster modal -->
+<div id="assign-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div onclick="event.target.id==='assign-modal' && this.classList.add('hidden')" class="bg-white w-full max-w-lg mx-4 rounded-3xl p-6 modal">
+    <div class="font-semibold mb-1">Add clients to <span id="assign-cluster-name"></span></div>
+    <div class="text-xs text-slate-500 mb-4">Select clients to assign this cluster label</div>
+
+    <form id="assign-form" method="post">
+      <div class="max-h-72 overflow-auto border border-slate-100 rounded-2xl p-2 space-y-1 text-sm">
+        <!-- populated by JS -->
+      </div>
+
+      <div class="mt-4 flex gap-3">
+        <button type="button" onclick="document.getElementById('assign-modal').classList.add('hidden')" class="flex-1 py-2 border rounded-2xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2 bg-slate-900 text-white rounded-2xl">Save Assignments</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let currentCluster = '';
+
+function showAssignModal(clusterName, currentMemberIds) {
+  currentCluster = clusterName;
+  const modal = document.getElementById('assign-modal');
+  const container = modal.querySelector('form > div');
+  const form = document.getElementById('assign-form');
+
+  document.getElementById('assign-cluster-name').textContent = clusterName;
+  form.action = `/clusters/${encodeURIComponent(clusterName)}/assign`;
+  container.innerHTML = '';
+
+  // Use global allClients if passed via template? For simplicity we use a full list from window if set.
+  // Since we don't have full list here, we'll render a simple message + hidden inputs for demo.
+  // In real, pass full list or fetch.
+  {% if all_clients %}
+    const all = {{ all_clients|map(attribute='id')|list|tojson }};
+    const names = {{ all_clients|map(attribute='name')|list|tojson }};
+    const clusters = {{ all_clients|map(attribute='customer_cluster')|list|tojson }};
+
+    for (let i=0; i<all.length; i++) {
+      const id = all[i];
+      const nm = names[i] || ('Client ' + id);
+      const checked = (clusters[i] || '') === clusterName ? 'checked' : '';
+      const div = document.createElement('label');
+      div.className = 'flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded-xl cursor-pointer';
+      div.innerHTML = `<input type="checkbox" name="client_ids" value="${id}" ${checked}> <span>${nm}</span>`;
+      container.appendChild(div);
+    }
+  {% else %}
+    container.innerHTML = '<div class="p-3 text-xs text-slate-400">Client list not available in this view. Use client profile to change cluster.</div>';
+  {% endif %}
+
+  modal.classList.remove('hidden');
+}
+</script>
+{% endblock %}

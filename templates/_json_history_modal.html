@@ -1,0 +1,24 @@
+<div>
+  {% if template %}
+    <div class="text-xs text-slate-400 mb-2">{{ template.name }}</div>
+  {% endif %}
+
+  <table class="w-full text-sm border-collapse">
+    <thead>
+      <tr class="text-left text-slate-400 text-xs border-b">
+        <th class="py-2 pr-4">Requested Time</th>
+        <th class="py-2">Client Name</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in usages %}
+      <tr class="border-b border-slate-100">
+        <td class="py-1.5 pr-4 text-slate-600">{{ u.sent_date or '—' }}</td>
+        <td class="py-1.5">{{ u.client_name or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="2" class="py-4 text-slate-400">No request history recorded for this template.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

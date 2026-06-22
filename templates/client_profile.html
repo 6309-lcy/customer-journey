@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="flex gap-8">
+  <!-- LEFT SIDEBAR - Summary Panel -->
+  <div class="w-80 shrink-0">
+    <div class="bg-white border border-slate-200 rounded-3xl p-6 sticky top-20">
+      <div class="mb-6">
+        <div class="text-2xl font-semibold tracking-tight">{{ client.name }}</div>
+        {% if client.web_store_url %}
+          <a href="{{ client.web_store_url }}" target="_blank" class="text-sm text-blue-600 hover:underline mt-1 block truncate">{{ client.web_store_url }}</a>
+        {% endif %}
+        <div class="mt-3">
+          {% set st = client.status or 'Onboarded' %}
+          <span class="badge {{ status_colors.get(st, 'bg-slate-100') }}">{{ st }}</span>
+        </div>
+      </div>
+
+      <div class="space-y-5 text-sm">
+        <!-- Key account data -->
+        <div>
+          <div class="uppercase text-[10px] tracking-widest text-slate-400 mb-1.5">NOTES</div>
+          <form method="post" action="{{ url_for('update_client_basic', client_id=client.id) }}">
+            <textarea name="notes" rows="4" class="w-full border border-slate-200 rounded-2xl p-3 text-sm">{{ client.notes or '' }}</textarea>
+            <input type="hidden" name="name" value="{{ client.name }}">
+            <input type="hidden" name="email" value="{{ client.email or '' }}">
+            <input type="hidden" name="industry" value="{{ client.industry or '' }}">
+            <input type="hidden" name="web_store_url" value="{{ client.web_store_url or '' }}">
+            <input type="hidden" name="status" value="{{ client.status }}">
+            <input type="hidden" name="customer_cluster" value="{{ client.customer_cluster or '' }}">
+            <button type="submit" class="mt-1 text-xs text-slate-500 hover:text-slate-900">Save notes</button>
+          </form>
+        </div>
+
+        <div>
+          <div class="uppercase text-[10px] tracking-widest text-slate-400 mb-1.5">CLUSTER</div>
+          <div class="text-slate-600">{{ client.customer_cluster or '—' }}</div>
+        </div>
+
+        <div>
+          <a href="mailto:{{ client.email }}" class="block w-full text-center py-2.5 border border-slate-200 rounded-2xl text-sm hover:bg-slate-50">
+            Send Support Email
+          </a>
+        </div>
+
+        <!-- Quick edit basic -->
+        <details class="text-sm">
+          <summary class="cursor-pointer text-slate-500 hover:text-slate-700">Edit basic info</summary>
+          <form method="post" action="{{ url_for('update_client_basic', client_id=client.id) }}" class="mt-3 space-y-3">
+            <input name="name" value="{{ client.name }}" class="w-full border px-3 py-1.5 rounded-xl text-sm" required>
+            <input name="email" value="{{ client.email or '' }}" class="w-full border px-3 py-1.5 rounded-xl text-sm">
+            <input name="industry" value="{{ client.industry or '' }}" class="w-full border px-3 py-1.5 rounded-xl text-sm">
+            <input name="web_store_url" value="{{ client.web_store_url or '' }}" class="w-full border px-3 py-1.5 rounded-xl text-sm" placeholder="Web store url">
+            
+            <select name="status" class="w-full border px-3 py-1.5 rounded-xl text-sm">
+              {% for s in ["Onboarded", "Active", "Requested", "Need help"] %}
+                <option {% if client.status == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+            
+            <input name="customer_cluster" value="{{ client.customer_cluster or '' }}" class="w-full border px-3 py-1.5 rounded-xl text-sm" placeholder="Cluster label">
+
+            <div class="pt-1">
+              <label class="text-xs block mb-1 text-slate-500">API Kit</label>
+              <div class="flex gap-4 text-xs">
+                <label><input type="checkbox" name="api_pdf" {% if client.api_pdf %}checked{% endif %}> PDF</label>
+                <label><input type="checkbox" name="json_file" {% if client.json_file %}checked{% endif %}> JSON</label>
+                <label><input type="checkbox" name="product_specs" {% if client.product_specs %}checked{% endif %}> Specs</label>
+              </div>
+            </div>
+
+            <button class="w-full py-2 bg-slate-900 text-white text-sm rounded-2xl mt-1">Save</button>
+          </form>
+        </details>
+      </div>
+    </div>
+    {% if countries %}
+    <div class="bg-white border border-slate-200 rounded-3xl p-6 mt-4">
+      <div class="uppercase text-[10px] tracking-widest text-slate-400 mb-3">Dispatching Countries</div>
+      <div class="flex flex-wrap gap-2">
+        {% for country in countries %}
+          <span class="px-3 py-1 border border-slate-200 rounded-2xl text-xs text-slate-600">{{ country }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <!-- DISPATCHING COUNTRIES PANEL -->
+  
+
+  <!-- MAIN CONTENT -->
+  <div class="flex-1 min-w-0">
+    <div class="bg-white border border-slate-200 rounded-3xl p-6">
+
+      <!-- Tab bar + Back button on same row -->
+      <div class="border-b border-slate-200 mb-6 flex items-center justify-between">
+        <div class="flex gap-x-8 text-sm" id="tab-nav">
+          <a href="#" onclick="switchTab('products', this); return false;"
+             class="tab-link py-3 border-b-2 border-slate-900 font-medium -mb-px">Products</a>
+          <a href="#" onclick="switchTab('history', this); return false;"
+             class="tab-link py-3 text-slate-500 hover:text-slate-800 border-b-2 border-transparent -mb-px">Requests &amp; History</a>
+          <a href="#" onclick="switchTab('json', this); return false;"
+             class="tab-link py-3 text-slate-500 hover:text-slate-800 border-b-2 border-transparent -mb-px">JSON Files</a>
+        </div>
+        <a href="{{ url_for('clients_page') }}" class="text-sm text-slate-500 hover:text-slate-700 pb-3">← Back to Clients</a>
+      </div>
+
+      <!-- PRODUCTS TAB -->
+      <div id="tab-products" class="tab-panel">
+        {% if products %}
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for p in products %}
+              <div class="border border-slate-200 rounded-3xl p-4">
+                <div class="text-xs text-slate-500">{{ p.type or p.category or '—' }} > {{ p.sub_type or p.subtype or '—' }}</div>
+                <div class="font-medium mt-1">{{ p.name }}</div>
+                {% if p.specs %}
+                  <div class="text-xs text-slate-500 mt-1">Specs: {{ p.specs | join(', ') if p.specs is iterable else p.specs }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-sm text-slate-400">No products assigned yet.</div>
+        {% endif %}
+
+        <!-- Add existing product to this client -->
+        <div class="mt-6 border-t pt-4">
+          <div class="text-sm font-medium mb-2">Add existing product to client's store</div>
+          <form method="post" action="{{ url_for('add_product_to_client', client_id=client.id) }}" class="flex gap-2">
+            <select name="product_id" class="flex-1 border border-slate-200 rounded-2xl px-3 py-2 text-sm">
+              {% for p in products_for_ui %}
+                {% if p.id not in client_product_ids %}
+                  <option value="{{ p.id }}">{{ p.type }} > {{ p.sub_type }} > {{ p.name }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <button type="submit" class="px-4 py-2 bg-slate-900 text-white rounded-2xl text-sm">Add Product</button>
+          </form>
+          {% if not products_for_ui %}
+            <div class="text-xs text-slate-400 mt-1">No other products available.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- REQUESTS & HISTORY TAB -->
+      <div id="tab-history" class="tab-panel hidden">
+        <div class="border border-slate-200 rounded-3xl p-5 mb-5">
+          <form method="post" action="{{ url_for('add_comm', client_id=client.id) }}" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+            <div class="md:col-span-2">
+              <input type="date" name="log_date" value="{{ 'now'|string|truncate(10, True, '') }}" class="w-full border px-3 py-2 rounded-2xl text-sm">
+            </div>
+            <div class="md:col-span-3">
+              <input name="event" placeholder="Event / note (e.g. requested JSON template for Booster)" class="w-full border px-3 py-2 rounded-2xl text-sm" required>
+            </div>
+            <div>
+              <button type="submit" class="w-full px-4 py-2 bg-white border rounded-2xl text-sm">Add Log</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="space-y-2 text-sm">
+          {% for log in comms %}
+            <div class="border border-slate-100 px-4 py-3 rounded-2xl flex gap-4">
+              <div class="text-slate-400 w-24 shrink-0">{{ log.log_date }}</div>
+              <div>{{ log.event }}</div>
+            </div>
+          {% else %}
+            <div class="text-slate-400 text-sm">No communication logs yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- JSON FILES TAB -->
+      <div id="tab-json" class="tab-panel hidden">
+        <div class="border border-slate-200 rounded-3xl p-5 mb-5">
+          <form method="post" action="{{ url_for('add_json_for_client', client_id=client.id) }}" enctype="multipart/form-data" class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label class="text-xs text-slate-500">Main Category</label>
+                <select id="main_cat" class="w-full border px-3 py-2 rounded-2xl text-sm" onchange="filterSubTypes()">
+                  <option value="">— Select —</option>
+                  {% for t in product_types %}
+                    <option value="{{ t }}">{{ t }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Sub Type</label>
+                <select id="sub_select" class="w-full border px-3 py-2 rounded-2xl text-sm" onchange="filterProducts()">
+                  <option value="">— Select —</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Sub Type Product</label>
+                <select id="prod_select" name="product" class="w-full border px-3 py-2 rounded-2xl text-sm" onchange="loadSpecs()">
+                  <option value="">— Select —</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Spec</label>
+                <select id="spec_select" name="product_specs" class="w-full border px-3 py-2 rounded-2xl text-sm">
+                  <option value="">— Select —</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <input type="file" name="json_file" accept=".json,.txt" class="block w-full text-sm file:mr-3 file:py-1.5 file:px-4 file:rounded-2xl file:border-0 file:bg-slate-100 file:text-xs">
+            </div>
+            <button class="px-5 py-2 bg-slate-900 text-white rounded-2xl text-sm">Upload &amp; Send JSON Template</button>
+          </form>
+        </div>
+
+        {% if sent_jsons %}
+          <div class="space-y-2">
+            {% for j in sent_jsons %}
+              <div class="flex items-center justify-between border border-slate-200 px-4 py-3 rounded-2xl text-sm">
+                <div>
+                  <span class="font-medium">{{ j.template_name or 'template.json' }}</span>
+                  <span class="ml-2 text-xs text-slate-400">{{ j.product or '' }} {{ j.product_specs or '' }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-slate-400">{{ j.sent_date }}</span>
+                  <a href="{{ url_for('download_json', filename=(j.template_name or 'file.json')) }}" class="text-blue-600 text-xs">Download</a>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-sm text-slate-400">No JSON files sent yet.</div>
+        {% endif %}
+
+        <!-- {% if countries %}
+          <div class="mt-8">
+            <div class="font-semibold mb-2 text-sm">Dispatching Countries</div>
+            <div class="flex flex-wrap gap-2">
+              {% for country in countries %}
+                <span class="px-3 py-1 border border-slate-200 rounded-2xl text-xs">{{ country }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %} -->
+      </div>
+
+    </div><!-- end main card -->
+  </div>
+
+<script>
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.tab-link').forEach(a => {
+    a.classList.remove('border-slate-900', 'font-medium', 'text-slate-900');
+    a.classList.add('text-slate-500', 'border-transparent');
+  });
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  el.classList.remove('text-slate-500', 'border-transparent');
+  el.classList.add('border-slate-900', 'font-medium', 'text-slate-900');
+}
+
+var ALL_PRODUCTS = {{ (products_for_ui | tojson | safe) if products_for_ui else '[]' }};
+
+function filterSubTypes() {
+  var cat = document.getElementById('main_cat').value;
+  var subSel = document.getElementById('sub_select');
+  var prodSel = document.getElementById('prod_select');
+  var specSel = document.getElementById('spec_select');
+  subSel.innerHTML = '<option value="">— Select Sub Type —</option>';
+  prodSel.innerHTML = '<option value="">— Select —</option>';
+  specSel.innerHTML = '<option value="">— Select —</option>';
+  var subs = {};
+  ALL_PRODUCTS.forEach(function(p) {
+    if (!cat || p.type === cat) {
+      if (p.sub_type) subs[p.sub_type] = true;
+    }
+  });
+  Object.keys(subs).sort().forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s;
+    opt.text = s;
+    subSel.appendChild(opt);
+  });
+}
+
+function filterProducts() {
+  var cat = document.getElementById('main_cat').value;
+  var sub = document.getElementById('sub_select').value;
+  var prodSel = document.getElementById('prod_select');
+  var specSel = document.getElementById('spec_select');
+  prodSel.innerHTML = '<option value="">— Select Sub Type Product —</option>';
+  specSel.innerHTML = '<option value="">— Select —</option>';
+  ALL_PRODUCTS.forEach(function(p) {
+    if ((!cat || p.type === cat) && (!sub || p.sub_type === sub)) {
+      var opt = document.createElement('option');
+      opt.value = p.name;
+      opt.text = p.name;
+      prodSel.appendChild(opt);
+    }
+  });
+}
+
+function loadSpecs() {
+  var prodName = document.getElementById('prod_select').value;
+  var cat = document.getElementById('main_cat').value;
+  var sub = document.getElementById('sub_select').value;
+  var specSel = document.getElementById('spec_select');
+  specSel.innerHTML = '<option value="">— Select Spec —</option>';
+  if (!prodName) return;
+  var found = ALL_PRODUCTS.find(function(p) {
+    return p.name === prodName && (!cat || p.type === cat) && (!sub || p.sub_type === sub);
+  });
+  if (found && found.specs && found.specs.length) {
+    found.specs.forEach(function(s) {
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.text = s;
+      specSel.appendChild(opt);
+    });
+  }
+}
+</script>
+{% endblock %}

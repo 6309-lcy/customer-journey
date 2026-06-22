@@ -2,15 +2,12 @@
 # 執行：pip install -r requirements.txt
 # 建議搭配 Python 3.11+ / 3.12 / 3.13（3.14 亦可）
 
-streamlit>=1.36.0
+flask>=3.0.0
 python-dotenv>=1.0.1
-pandas>=2.2.0
-pydantic>=2.7.0
-networkx>=3.3
-pyvis>=0.3.2
-plotly>=5.22.0
 pymysql>=1.1.1
-cryptography>=42.0.0  # optional, for secure MySQL connections (caching_sha2_password) when using real DB (not needed for demo)
+cryptography>=42.0.0  # optional for MySQL
+# MongoDB (future): pymongo
+# pandas plotly etc can be removed if you no longer need old analytics/maps
 
 # 開發/除錯可選（非必要）
 # python-dotenv[cli]>=1.0.1
