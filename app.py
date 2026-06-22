@@ -46,6 +46,109 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 # ----------------------------------------------------------
+# json-processor mechanism (ported/adapted from json-processor/app.py)
+# We use ONLY the core generation logic here. Input = short config like new request.json
+# Output = the exact processed wrapper containing full "template"
+# ----------------------------------------------------------
+def process_json_config(config: dict) -> dict:
+    """
+    Exact port of the n8n generation logic from json-processor.
+    Accepts a short config:
+      {
+        "qty": 60,
+        "material paths": "1111,2222,3333",
+        "properties": {"back design mode": "same", "front design mode": "different"},
+        ...
+      }
+    Returns the object that gets written as the final JSON file:
+      { "json": { "template": <full order>, "thirdOrderId": "...", "quantity": N } }
+    """
+    try:
+        quantity = int(str(config.get("qty", 1)))
+    except Exception:
+        quantity = 1
+    if quantity < 1:
+        quantity = 1
+
+    material_path = str(config.get("material paths", "") or config.get("material_paths", "")).strip() or "0,0,0"
+    image_link = "replace_with_your_design"
+
+    properties: dict = {}
+    raw_props = config.get("properties")
+    if isinstance(raw_props, dict):
+        properties = dict(raw_props)
+
+    page_content_designs = [
+        {"pageContentIndex": i, "effect": "CMYK", "image": image_link}
+        for i in range(quantity)
+    ]
+
+    third_order_id = "replace_with_your_order_number"
+
+    base_item = {
+        "thirdOrderItemId": third_order_id,
+        "qty": quantity,
+        "unitPrice": "10.00",
+        "storeProductId": "your_store_product_id",
+        "properties": properties,
+        "customizeProject": {
+            "customizeType": "IMAGE",
+            "comparisonThumbnail": image_link,
+            "designs": [
+                {
+                    "side": "Card_Front",
+                    "materialPath": material_path,
+                    "pageContentDesigns": list(page_content_designs)
+                },
+                {
+                    "side": "Card_Back",
+                    "materialPath": material_path,
+                    "pageContentDesigns": list(page_content_designs)
+                }
+            ],
+            "content": [
+                {"side": "Booster_Pack", "image": image_link}
+            ]
+        }
+    }
+
+    final_json = {
+        "thirdOrderId": third_order_id,
+        "thirdOrderNumber": third_order_id,
+        "items": [base_item],
+        "shippingMethod": "Standard",
+        "paymentMethod": "PayPal",
+        "currency": "USD",
+        "status": "processing",
+        "deliveryAddress": {
+            "country": "US",
+            "state": "NJ",
+            "city": "Atlantic City",
+            "address_1": "1301 Bacharach Boulevard Atlantic City NJ 08401 United States",
+            "address_2": "",
+            "postcode": "08401",
+            "first_name": "REPLACE_WITH_FIRST_NAME",
+            "last_name": "REPLACE_WITH_LAST_NAME",
+            "phone": "0777-123456",
+            "mobile": "18475031246",
+            "email": "REPLACE_WITH_EMAIL@example.com",
+            "company": "REPLACE_WITH_COMPANY"
+        },
+        "billingAddress": {},
+        "orderTotals": [
+            {"name": "TAX", "value": "0.00"},
+            {"name": "SHIPPING", "value": "1.00"},
+            {"name": "SUBTOTAL", "value": f"{10 * quantity:.2f}"},
+            {"name": "ORDER_TOTAL", "value": f"{11 * quantity:.2f}"}
+        ]
+    }
+    final_json["billingAddress"] = dict(final_json["deliveryAddress"])
+
+    # Return ONLY the template (not wrapped {"json": { "template": ... }})
+    # This is the final JSON file content saved for the client/product.
+    return final_json
+
+# ----------------------------------------------------------
 # DB switch helper (for future Mongo). Currently MySQL only.
 # ----------------------------------------------------------
 def using_mysql() -> bool:
@@ -330,23 +433,122 @@ def add_comm(client_id: int):
 
 @app.route("/client/<int:client_id>/add_json", methods=["POST"])
 def add_json_for_client(client_id: int):
-    uploaded = request.files.get("json_file")
-    product = request.form.get("product") or None
-    specs_raw = request.form.get("product_specs") or ""
-    specs = [s.strip() for s in specs_raw.split(",") if s.strip()] if specs_raw else None
+    # New flow: detailed form fields from JSON tab (no uploaded file required)
+    # Falls back to legacy file upload if present.
+    product = (request.form.get("product") or "").strip() or None
 
-    if not uploaded or not allowed_file(uploaded.filename):
-        flash("Please upload a valid .json file.", "error")
+    # Collect rich form values for summary + processor
+    card_stock = request.form.get("card_stock") or ""
+    size_deck = request.form.get("size_deck") or "1"
+    printing = request.form.get("printing") or ""
+    finish = request.form.get("finish") or ""
+    packaging = request.form.get("packaging") or ""
+    seal = request.form.get("seal") or ""
+    card_sel = request.form.get("card_selection_mode") or ""
+    store_pt = request.form.get("store_product_type") or ""
+    img_front = request.form.get("image_text_front") or ""
+    img_back = request.form.get("image_text_back") or ""
+
+    # New: 3 separate material path inputs (unique per Card Stock / Printing / Finish)
+    mp_card = (request.form.get("material_card_stock") or "1111,1111,1111").strip()
+    mp_print = (request.form.get("material_printing") or "1111,1111,1111").strip()
+    mp_finish = (request.form.get("material_finish") or "1111,1111,1111").strip()
+    # Use mechanism with a combined paths value (or primary). Here we combine for distinctness.
+    material_paths = f"{mp_card},{mp_print},{mp_finish}".strip(",").replace(",,", ",")
+
+    # Build human summary list for display (replaces old product_specs everywhere)
+    # Note: product name and store type are omitted from display per request
+    summary = []
+    if card_stock:
+        summary.append(f"Card Stock: {card_stock}")
+    try:
+        qty_i = int(size_deck)
+        if qty_i < 1: qty_i = 1
+    except:
+        qty_i = 1
+    summary.append(f"Size of deck: {qty_i}")
+    if printing:
+        summary.append(f"Printing: {printing}")
+    if finish:
+        summary.append(f"Finish: {finish}")
+    if packaging:
+        summary.append(f"Packaging: {packaging}")
+    if seal:
+        summary.append(f"Seal: {seal}")
+    if card_sel:
+        summary.append(f"Card Selection: {card_sel}")
+    if img_front:
+        summary.append(f"Front: {img_front}")
+    if img_back:
+        summary.append(f"Back: {img_back}")
+
+    # Filter for actual stored product_specs (no product name, no store type)
+    specs_for_record = [s for s in summary if "Store" not in s]
+
+    # Map design modes
+    def _mode(v: str) -> str:
+        v = (v or "").lower()
+        if "different" in v:
+            return "different"
+        return "same"
+    front_mode = _mode(img_front)
+    back_mode = _mode(img_back)
+
+    uploaded = request.files.get("json_file")
+    legacy_specs = None
+    if uploaded and allowed_file(uploaded.filename):
+        uploaded.filename = sanitize_filename(uploaded.filename)
+        specs_raw = request.form.get("product_specs") or ""
+        legacy_specs = [s.strip() for s in specs_raw.split(",") if s.strip()] if specs_raw else None
+        try:
+            database.save_client_json_send(client_id, uploaded, product=product, product_specs=legacy_specs or specs_for_record)
+            flash("JSON template uploaded and recorded.", "success")
+        except Exception as e:
+            flash(f"Upload failed: {e}", "error")
         return redirect(url_for("client_profile", client_id=client_id))
 
-    # Sanitize uploaded name (though save derives its own from product+specs)
-    uploaded.filename = sanitize_filename(uploaded.filename)
+    # NEW GENERATE FLOW (preferred)
+    if not product:
+        flash("Please select a Sub Type Product.", "error")
+        return redirect(url_for("client_profile", client_id=client_id))
+
+    # Build short config exactly like json-processor's "new request.json"
+    client_obj = database.fetch_client(client_id) or {}
+    short_config = {
+        "clientname": client_obj.get("name") or f"client_{client_id}",
+        "product": product,
+        "qty": qty_i,
+        "material paths": material_paths,
+        "properties": {
+            "back design mode": back_mode,
+            "front design mode": front_mode
+        }
+    }
+
+    # Generate using the ported mechanism (returns the template directly)
+    try:
+        template_json = process_json_config(short_config)
+    except Exception as ex:
+        flash(f"Failed to generate from processor: {ex}", "error")
+        return redirect(url_for("client_profile", client_id=client_id))
 
     try:
-        database.save_client_json_send(client_id, uploaded, product=product, product_specs=specs)
-        flash("JSON template uploaded and recorded.", "success")
+        # Save the final *template* (no "json" wrapper)
+        tid = database.save_client_json_send(
+            client_id,
+            uploaded_file=None,
+            product=product,
+            product_specs=specs_for_record,
+            generated_json=template_json
+        )
+        # For the JS fetch path (new generator UI) respond with JSON so fetch sees success
+        if request.form.get("card_stock") or request.form.get("material_card_stock"):
+            return jsonify({"success": True})
+        flash("JSON template generated via processor and sent.", "success")
     except Exception as e:
-        flash(f"Upload failed: {e}", "error")
+        if request.form.get("card_stock") or request.form.get("material_card_stock"):
+            return jsonify({"success": False, "error": str(e)}), 400
+        flash(f"Save failed: {e}", "error")
 
     return redirect(url_for("client_profile", client_id=client_id))
 @app.route("/client/<int:client_id>/add_delivery", methods=["POST"])

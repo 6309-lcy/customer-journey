@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+data/
+*.log
+.DS_Store
+*.csv.bak
+templates_shareable_with_links.csv
+processing_log_old.csv

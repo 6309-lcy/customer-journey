@@ -28,7 +28,11 @@
             <div onclick="showJsonHistory({{ jf.json_template_id or 0 }})" 
                 class="cursor-pointer border border-slate-200 bg-white rounded-3xl p-4 hover:border-slate-400 transition">
               <div class="font-medium">{{ jf.template_name or 'JSON Template' }}</div>
-              <div class="text-xs text-slate-400 mt-1">Specs: {{ jf.specs if jf.specs else '—' }}</div>
+              {% if jf.specs and jf.specs is iterable and jf.specs is not string %}
+              <div class="text-xs text-slate-400 mt-1">{{ jf.specs | join(' ') }}</div>
+              {% else %}
+              <div class="text-xs text-slate-400 mt-1">{{ jf.specs if jf.specs else '—' }}</div>
+              {% endif %}
               <div class="text-[10px] mt-4 text-blue-600">Click to view request history &amp; download →</div>
             </div>
           {% endfor %}

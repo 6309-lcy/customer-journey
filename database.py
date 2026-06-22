@@ -437,9 +437,9 @@ def get_connection():
     return pymysql.connect(
         host=os.getenv("MYSQL_HOST", "localhost"),
         port=int(os.getenv("MYSQL_PORT", 3306)),
-        user=os.getenv("MYSQL_USER", "root"),
+        user=os.getenv("MYSQL_USER", "remoteuser"),
         password=os.getenv("MYSQL_PASSWORD", ""),
-        database=os.getenv("MYSQL_DATABASE", "client_profile_db"),
+        database=os.getenv("MYSQL_DATABASE", "cj"),
         charset="utf8mb4",
         cursorclass=DictCursor,
         autocommit=True,
@@ -1270,42 +1270,38 @@ def set_client_products(client_id: int, product_ids: list[int]):
         _execute("INSERT INTO client_products (client_id, product_id) VALUES (%s, %s)", (client_id, pid))
 
 
-def save_client_json_send(client_id: int, uploaded_file, product: str = None, product_specs: list[str] = None, override_filename=None) -> int:
+def save_client_json_send(client_id: int, uploaded_file=None, product: str = None, product_specs: list[str] = None, override_filename=None, generated_json: dict = None) -> int:
     """
-    Saves the uploaded JSON file to disk, creates a json_templates entry,
+    Saves the (uploaded or GENERATED) JSON file to disk, creates a json_templates entry,
     and records the send in client_json_sends.
-    File is renamed based on product + specs e.g. "Booster_Pack_20X20X20.json" (as requested).
+    When generated_json is provided (from json-processor mechanism), we write the processed dict.
+    product_specs now receives the rich form choice summary list for display.
     Returns the json_template_id.
     """
-    if not uploaded_file:
-        return None
     def _clean_part(s: str) -> str:
-        s = s.encode('ascii', 'ignore').decode('ascii')  # strip unicode chars like " 
+        s = str(s or "")
+        s = s.encode('ascii', 'ignore').decode('ascii')
         s = s.strip().replace(" ", "_")
-        s = re.sub(r'[^\w\-.]', '_', s)  # replace invalid with _
-        s = re.sub(r'_+', '_', s)  # collapse multiple _
+        s = re.sub(r'[^\w\-.]', '_', s)
+        s = re.sub(r'_+', '_', s)
         s = s.strip('_')
         if not s:
             s = "part"
         return s
 
-    # Derive pretty filename from product + specs (no spaces, joined by _ )
-    # Use _clean_part for base too to remove invalid Windows filename chars like " ( ) etc.
     base = _clean_part(product or "Template")
     if not base:
         base = "Template"
     spec_part = ""
     if product_specs:
-        cleaned = [_clean_part(s) for s in product_specs if s and s.strip()]
+        cleaned = [_clean_part(s) for s in product_specs if s and str(s).strip()]
         if cleaned:
-            spec_part = "_" + "_".join(cleaned)
+            spec_part = "_" + "_".join(cleaned)[:80]
     derived_name = f"{base}{spec_part}.json"
-    # ensure .json suffix
     if not derived_name.lower().endswith(".json"):
         derived_name += ".json"
     if derived_name == ".json":
         derived_name = "template.json"
-    # Extra FS safety (werkzeug available via Flask)
     try:
         from werkzeug.utils import secure_filename
         derived_name = secure_filename(derived_name) or "template.json"
@@ -1315,7 +1311,6 @@ def save_client_json_send(client_id: int, uploaded_file, product: str = None, pr
         derived_name += ".json"
 
     if _DEMO_MODE:
-        # simulate for demo (no real file written, but history shows; support profile json section + logs)
         global _DEMO_JSON_TEMPLATES, _DEMO_CLIENT_JSON_SENDS
         new_tid = max([t.get("id", 0) for t in _DEMO_JSON_TEMPLATES], default=0) + 1
         _DEMO_JSON_TEMPLATES.append({
@@ -1333,42 +1328,45 @@ def save_client_json_send(client_id: int, uploaded_file, product: str = None, pr
             "product": product,
             "product_specs": specs_list
         })
-        # Auto system log for upload (also demo)
         try:
             client = fetch_client(client_id) or {}
             client_name = client.get("name") or f"Client #{client_id}"
-            specs_str = ", ".join(product_specs) if product_specs else "—"
-            message = f"JSON template uploaded for {client_name}: {product or '—'} (specs: {specs_str})"
-            add_system_log(message, ["json", "upload", "pdf"], client_name=client_name, industry=client.get("industry"))
+            specs_str = ", ".join([str(x) for x in (product_specs or [])]) if product_specs else "—"
+            message = f"JSON template generated for {client_name}: {product or '—'} ({specs_str})"
+            add_system_log(message, ["json", "upload", "processor"], client_name=client_name, industry=client.get("industry"))
         except Exception:
             pass
         return new_tid
 
     try:
-        # Use derived (product+specs) name for stored file + template record
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         save_path = os.path.join(UPLOAD_DIR, derived_name)
 
-        with open(save_path, "wb") as f:
-            uploaded_file.stream.seek(0)
-            f.write(uploaded_file.stream.read())
+        if generated_json:
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(generated_json, f, indent=2, ensure_ascii=False)
+        elif uploaded_file:
+            with open(save_path, "wb") as f:
+                uploaded_file.stream.seek(0)
+                f.write(uploaded_file.stream.read())
+        else:
+            # nothing to write, still create record? create minimal placeholder
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump({"note": "no content provided"}, f)
 
         specs_json = json.dumps(product_specs) if product_specs else None
 
-        # Create master template record with pretty name
         template_id = _execute(
             "INSERT INTO json_templates (name, file_path) VALUES (%s, %s)",
             (derived_name, save_path)
         )
 
-        # Record the send for this client
         _execute(
             "INSERT INTO client_json_sends (client_id, json_template_id, sent_date, product, product_specs) "
             "VALUES (%s, %s, CURDATE(), %s, %s)",
             (client_id, template_id, product, specs_json)
         )
 
-        # Optionally auto-associate to product if we have product name matching
         try:
             if product:
                 prod = _query("SELECT id FROM products WHERE name = %s", (product,), fetch="one")
@@ -1381,13 +1379,12 @@ def save_client_json_send(client_id: int, uploaded_file, product: str = None, pr
         except Exception:
             pass
 
-        # Auto system log for upload (JSON / PDF etc.)
         try:
             client = fetch_client(client_id) or {}
             client_name = client.get("name") or f"Client #{client_id}"
-            specs_str = ", ".join(product_specs) if product_specs else "—"
-            message = f"JSON template uploaded for {client_name}: {product or '—'} (specs: {specs_str})"
-            add_system_log(message, ["json", "upload", "pdf"], client_name=client_name, industry=client.get("industry"))
+            specs_str = ", ".join([str(x) for x in (product_specs or [])]) if product_specs else "—"
+            message = f"JSON template generated for {client_name}: {product or '—'} ({specs_str})"
+            add_system_log(message, ["json", "processor", "generated"], client_name=client_name, industry=client.get("industry"))
         except Exception:
             pass
 

@@ -1,0 +1,11 @@
+{
+    "clientname" : "anson",
+    "product" : "booster pack",
+    "qty" : 60,
+    "material paths": "500000,5000000,500000",
+    "properties" : {
+            "back design mode" : "same",
+            "front design mode" : "same"
+         }
+
+}   

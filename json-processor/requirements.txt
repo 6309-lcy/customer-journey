@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+python-multipart
+
+# For more robust production serving (optional)
+# gunicorn
+# Use: gunicorn -k uvicorn.workers.UvicornWorker -w 2 app:app --bind 0.0.0.0:8000

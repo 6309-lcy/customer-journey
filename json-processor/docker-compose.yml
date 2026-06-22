@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  json-processor:
+    build: .
+    container_name: json-processor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_DIR=/app/data
+      # Optional: set this if you put it behind a reverse proxy (Nginx, Traefik, Caddy)
+      # - FORWARDED_ALLOW_IPS=*
+    volumes:
+      # Persistent storage for uploads + generated templates + CSV log
+      - json_processor_data:/app/data
+
+volumes:
+  json_processor_data:
+    driver: local

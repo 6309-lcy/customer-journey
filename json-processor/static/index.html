@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>n8n Template Generator • Local</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+    
+    :root {
+      --primary: #6366f1;
+    }
+    
+    body {
+      font-family: 'Inter', system_ui, sans-serif;
+    }
+    
+    .font-display {
+      font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+    }
+
+    .upload-zone {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .upload-zone.dragover {
+      background-color: #f0f0ff;
+      border-color: #6366f1;
+      transform: scale(1.01);
+    }
+
+    .json-viewer {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      tab-size: 2;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .stat-badge {
+      font-size: 0.75rem;
+      padding: 1px 8px;
+      border-radius: 9999px;
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .result-panel {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .log-table th {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-pill {
+      font-size: 0.65rem;
+      padding: 1px 7px;
+      border-radius: 9999px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <div class="max-w-5xl mx-auto px-6 py-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <div class="flex items-center gap-x-3">
+          <div class="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center">
+            <i class="fa-solid fa-file-code text-white text-2xl"></i>
+          </div>
+          <div>
+            <h1 class="font-display text-3xl font-semibold tracking-tighter text-slate-900">n8n Template Generator</h1>
+            <p class="text-slate-500 text-sm -mt-0.5">Local test • matches your Function Node</p>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-x-2 text-sm">
+        <div class="flex items-center gap-x-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-2xl text-slate-600">
+          <i class="fa-solid fa-circle text-emerald-500 text-[10px]"></i>
+          <span class="font-medium">Running locally</span>
+        </div>
+        <div onclick="window.location.reload()" 
+             class="cursor-pointer flex items-center gap-x-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 transition rounded-2xl text-slate-600">
+          <i class="fa-solid fa-rotate text-xs"></i>
+          <span class="font-medium text-sm">Refresh</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="bg-white border border-slate-200 shadow-sm rounded-3xl p-8 mb-8">
+      <div class="mb-4">
+        <div class="section-title text-indigo-600 mb-1">Step 1</div>
+        <h2 class="text-xl font-semibold text-slate-900">Upload JSON file</h2>
+        <p class="text-slate-500 text-sm mt-1">Drop a file or click to browse. Only .json accepted.</p>
+      </div>
+
+      <!-- Upload Zone -->
+      <div id="upload-zone"
+           class="upload-zone border-2 border-dashed border-slate-300 hover:border-indigo-300 rounded-3xl p-10 text-center cursor-pointer bg-slate-50">
+        <input type="file" id="file-input" accept=".json,application/json" class="hidden">
+        
+        <div class="flex flex-col items-center">
+          <div class="w-14 h-14 bg-white border border-slate-200 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+            <i class="fa-solid fa-cloud-upload-alt text-3xl text-indigo-400"></i>
+          </div>
+          <div class="font-semibold text-slate-700">Drop your JSON file here</div>
+          <div class="text-slate-500 text-sm mt-1">or</div>
+          <button onclick="document.getElementById('file-input').click()"
+                  class="mt-3 inline-flex items-center gap-x-2 px-5 py-2 bg-white border border-slate-300 hover:border-slate-400 transition rounded-2xl text-sm font-medium text-slate-700 shadow-sm">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Browse files</span>
+          </button>
+          <div class="mt-3 text-[10px] text-slate-400">Max practical size: a few MB (local only)</div>
+        </div>
+      </div>
+
+      <!-- Selected file info -->
+      <div id="file-info" class="hidden mt-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-x-3 min-w-0">
+            <i class="fa-solid fa-file-code text-xl text-indigo-500"></i>
+            <div class="min-w-0">
+              <div id="file-name" class="font-medium text-slate-800 truncate"></div>
+              <div id="file-size" class="text-xs text-slate-500"></div>
+            </div>
+          </div>
+          <button onclick="clearSelectedFile()" 
+                  class="text-xs px-3 py-1.5 text-slate-500 hover:text-red-500 hover:bg-red-50 transition rounded-xl flex items-center gap-x-1">
+            <i class="fa-solid fa-times"></i>
+            <span class="font-medium">Clear</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Process Button -->
+      <div class="mt-5">
+        <button id="process-btn"
+                onclick="processFile()"
+                disabled
+                class="w-full flex items-center justify-center gap-x-2 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition text-white font-semibold rounded-2xl text-sm shadow-sm">
+          <i class="fa-solid fa-magic"></i>
+          <span>Process JSON</span>
+        </button>
+        <div class="text-center text-[10px] text-slate-400 mt-2">The file will be sent to your local backend only.</div>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results-section" class="hidden mb-8">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <div>
+          <div class="section-title text-emerald-600">Step 2 • Result</div>
+          <h2 class="text-xl font-semibold text-slate-900">Improved JSON</h2>
+        </div>
+        <div class="flex items-center gap-x-2">
+          <button onclick="downloadImprovedJson()"
+                  class="inline-flex items-center gap-x-2 px-4 py-2 bg-white border border-slate-300 hover:bg-emerald-50 hover:border-emerald-200 text-emerald-700 transition rounded-2xl text-sm font-semibold">
+            <i class="fa-solid fa-download"></i>
+            <span>Download</span>
+          </button>
+          <button onclick="copyImprovedJson()"
+                  class="inline-flex items-center gap-x-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 transition rounded-2xl text-sm font-semibold">
+            <i class="fa-solid fa-copy"></i>
+            <span>Copy</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Two column: Original summary + Processed -->
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <!-- Original info -->
+        <div class="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">Original</div>
+            <div id="original-stats" class="text-xs"></div>
+          </div>
+          <div class="flex items-center gap-2 text-sm">
+            <i class="fa-solid fa-file text-slate-400"></i>
+            <span id="original-filename" class="font-medium text-slate-700 truncate"></span>
+          </div>
+          <div id="original-size" class="text-xs text-slate-500 mt-0.5"></div>
+          
+          <div class="mt-4 pt-4 border-t text-xs">
+            <div class="text-slate-500 mb-1">Saved locally as:</div>
+            <div id="saved-original" class="font-mono text-[10px] bg-slate-100 px-2 py-1 rounded break-all text-slate-600"></div>
+          </div>
+        </div>
+
+        <!-- Processed JSON -->
+        <div class="lg:col-span-3 bg-white border border-slate-200 rounded-3xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-x-2">
+              <div class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Processed (n8n template)</div>
+              <div id="result-quantity" class="hidden text-[10px] px-2 py-px rounded-full bg-emerald-100 text-emerald-700 font-semibold"></div>
+            </div>
+            <div id="processed-stats" class="text-xs"></div>
+          </div>
+          
+          <div class="result-panel p-3 text-xs">
+            <pre id="processed-json" class="json-viewer text-slate-800"></pre>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between text-xs">
+            <div id="saved-processed" class="font-mono text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded"></div>
+            <button onclick="showFullJsonModal()" 
+                    class="text-emerald-600 hover:text-emerald-700 flex items-center gap-x-1 text-xs font-medium">
+              <span>View full in modal</span>
+              <i class="fa-solid fa-external-link-alt text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3 flex justify-end">
+        <button onclick="resetUI()" 
+                class="text-xs px-4 py-2 text-slate-500 hover:text-slate-700 flex items-center gap-x-1.5">
+          <i class="fa-solid fa-redo"></i>
+          <span>Process another file</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- History / CSV Log -->
+    <div class="bg-white border border-slate-200 rounded-3xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <div class="section-title text-slate-500">Processing History</div>
+          <h3 class="font-semibold text-lg text-slate-800">Recent activity (from CSV)</h3>
+          <p class="text-[10px] text-slate-400 mt-0.5">Internal users can browse here and directly download the generated JSON templates. Use "Download Log CSV" if you need the raw file for Excel.</p>
+        </div>
+        <div class="flex items-center gap-x-2">
+          <button onclick="downloadLogCsv()" 
+                  class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-slate-300 hover:bg-slate-100 transition">
+            <i class="fa-solid fa-file-csv text-xs"></i>
+            <span>Download Log CSV</span>
+          </button>
+          <button onclick="resetCsvLog()" 
+                  class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-red-200 text-red-600 hover:bg-red-50 transition">
+            <i class="fa-solid fa-trash text-xs"></i>
+            <span>Reset log</span>
+          </button>
+          <button onclick="loadLogs()" 
+                  class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition">
+            <i class="fa-solid fa-sync text-xs"></i>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm log-table">
+          <thead>
+            <tr class="border-b">
+              <th class="py-2 text-left font-medium">Template (output file)</th>
+              <th class="py-2 text-left font-medium">Client Name</th>
+              <th class="py-2 text-left font-medium">Product</th>
+              <th class="py-2 text-right font-medium w-12">Qty</th>
+              <th class="py-2 text-left font-medium">Client Email</th>
+              <th class="py-2 text-left font-medium w-36">Processed At</th>
+              <th class="py-2 text-left font-medium w-28">Date Join</th>
+              <th class="py-2 text-center font-medium w-20">Action</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody" class="text-slate-600">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-3">Data is stored in <span class="font-mono">data/processing_log.csv</span> — you can open it directly in Excel.</div>
+    </div>
+
+    <div class="text-center mt-8 text-xs text-slate-400">
+      Local test tool • All files stay on your computer • Not for production use
+    </div>
+  </div>
+
+  <!-- Full JSON Modal -->
+  <div id="json-modal" onclick="if (event.target.id === 'json-modal') hideFullJsonModal()" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6">
+    <div onclick="event.stopImmediatePropagation()" class="bg-white rounded-3xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-xl">
+      <div class="px-5 py-4 border-b flex items-center justify-between">
+        <div class="font-semibold text-lg">Processed JSON</div>
+        <button onclick="hideFullJsonModal()" class="text-slate-400 hover:text-slate-600 px-2">
+          <i class="fa-solid fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="p-5 overflow-auto flex-1">
+        <pre id="modal-json-content" class="json-viewer text-xs bg-slate-50 p-4 rounded-2xl border"></pre>
+      </div>
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button onclick="copyFromModal()" class="px-4 py-2 text-sm border rounded-2xl flex items-center gap-x-2 hover:bg-slate-50">
+          <i class="fa-solid fa-copy"></i>
+          <span>Copy</span>
+        </button>
+        <button onclick="downloadFromModal()" class="px-4 py-2 text-sm bg-emerald-600 text-white rounded-2xl flex items-center gap-x-2">
+          <i class="fa-solid fa-download"></i>
+          <span>Download</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Tailwind script
+    function initTailwind() {
+      document.documentElement.style.setProperty('--accent', '#6366f1');
+    }
+
+    let currentFile = null;
+    let lastProcessedResult = null;
+
+    // Drag & drop + file selection
+    function setupUploadZone() {
+      const zone = document.getElementById('upload-zone');
+      const input = document.getElementById('file-input');
+
+      zone.addEventListener('click', () => input.click());
+
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        zone.classList.add('dragover');
+      });
+
+      zone.addEventListener('dragleave', () => {
+        zone.classList.remove('dragover');
+      });
+
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length > 0) {
+          handleFileSelection(e.dataTransfer.files[0]);
+        }
+      });
+
+      input.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          handleFileSelection(e.target.files[0]);
+        }
+      });
+    }
+
+    function handleFileSelection(file) {
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        alert('Please select a .json file');
+        return;
+      }
+
+      currentFile = file;
+
+      // Show file info
+      document.getElementById('file-info').classList.remove('hidden');
+      document.getElementById('file-name').textContent = file.name;
+      document.getElementById('file-size').textContent = formatBytes(file.size);
+
+      // Enable process button
+      document.getElementById('process-btn').disabled = false;
+    }
+
+    function clearSelectedFile() {
+      currentFile = null;
+      document.getElementById('file-info').classList.add('hidden');
+      document.getElementById('file-input').value = '';
+      document.getElementById('process-btn').disabled = true;
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    async function processFile() {
+      if (!currentFile) return;
+
+      const btn = document.getElementById('process-btn');
+      const originalBtnText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Processing...</span>`;
+
+      const formData = new FormData();
+      formData.append('json_file', currentFile);
+
+      try {
+        const res = await fetch('/api/process', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Server error: ${res.status}`);
+        }
+
+        const data = await res.json();
+        lastProcessedResult = data;
+
+        // Show results
+        showResults(data);
+
+        // Refresh log table
+        await loadLogs();
+
+      } catch (error) {
+        console.error(error);
+        alert('Processing failed:\n' + error.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnText;
+      }
+    }
+
+    function showResults(data) {
+      // Hide upload file info area a bit
+      document.getElementById('results-section').classList.remove('hidden');
+
+      // Original side
+      document.getElementById('original-filename').textContent = data.original_filename;
+      document.getElementById('original-size').textContent = formatBytes(data.original_size);
+      document.getElementById('saved-original').textContent = data.saved?.original || '';
+
+      const origStatsEl = document.getElementById('original-stats');
+      const os = data.stats?.original || {};
+      origStatsEl.innerHTML = `
+        <span class="stat-badge">${os.type || 'object'}</span>
+        ${os.key_count ? `<span class="stat-badge ml-1">${os.key_count} keys</span>` : ''}
+        ${os.item_count ? `<span class="stat-badge ml-1">${os.item_count} items</span>` : ''}
+      `;
+
+      // Processed side
+      const processedPretty = JSON.stringify(data.processed_json, null, 2);
+      document.getElementById('processed-json').textContent = processedPretty;
+
+      document.getElementById('processed-stats').innerHTML = `
+        <span class="stat-badge bg-emerald-100 text-emerald-700">${formatBytes(data.processed_size)}</span>
+      `;
+
+      // Show quantity badge if we have it (from n8n template generator)
+      const qtyEl = document.getElementById('result-quantity');
+      if (data.quantity != null) {
+        qtyEl.textContent = `qty: ${data.quantity}`;
+        qtyEl.classList.remove('hidden');
+      } else {
+        qtyEl.classList.add('hidden');
+      }
+
+      document.getElementById('saved-processed').textContent = data.saved?.processed || '';
+
+      // Scroll into view
+      document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function downloadImprovedJson() {
+      if (!lastProcessedResult) return;
+      const blob = new Blob([JSON.stringify(lastProcessedResult.processed_json, null, 2)], {
+        type: 'application/json'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Use the nice formatted name if provided by backend (following the rule)
+      const name = lastProcessedResult.download_name 
+        || (lastProcessedResult.original_filename || 'improved').replace('.json', '') + '_improved.json';
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function copyImprovedJson() {
+      if (!lastProcessedResult) return;
+      const text = JSON.stringify(lastProcessedResult.processed_json, null, 2);
+      navigator.clipboard.writeText(text).then(() => {
+        const originalText = event.currentTarget?.innerText;
+        const btns = document.querySelectorAll('button');
+        // quick toast
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-2xl text-xs flex items-center gap-x-2 shadow-lg';
+        toast.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied to clipboard</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1600);
+      }).catch(() => {
+        // fallback
+        prompt('Copy this JSON:', text);
+      });
+    }
+
+    let modalData = null;
+
+    function showFullJsonModal() {
+      if (!lastProcessedResult) return;
+      modalData = lastProcessedResult.processed_json;
+      document.getElementById('modal-json-content').textContent = JSON.stringify(modalData, null, 2);
+      document.getElementById('json-modal').classList.remove('hidden');
+      document.getElementById('json-modal').classList.add('flex');
+    }
+
+    function hideFullJsonModal() {
+      const modal = document.getElementById('json-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    function copyFromModal() {
+      if (!modalData) return;
+      navigator.clipboard.writeText(JSON.stringify(modalData, null, 2)).then(() => {
+        hideFullJsonModal();
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-2xl text-xs flex items-center gap-x-2 shadow-lg';
+        toast.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1400);
+      });
+    }
+
+    function downloadFromModal() {
+      if (!modalData || !lastProcessedResult) return;
+      const blob = new Blob([JSON.stringify(modalData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Use the nice formatted name if provided by backend (following the rule)
+      const name = lastProcessedResult.download_name 
+        || (lastProcessedResult.original_filename || 'data').replace('.json','') + '_improved.json';
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      hideFullJsonModal();
+    }
+
+    async function resetCsvLog() {
+      if (!confirm("Reset the CSV log to the exact 6 columns (Client Name, Product, Qty, Date Join, Template, Client Email)?\n\nThis will clear the current history.")) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/reset-log', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          const toast = document.createElement('div');
+          toast.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-2 rounded-2xl text-xs flex items-center gap-x-2 shadow-lg';
+          toast.innerHTML = `<i class="fa-solid fa-check"></i> <span>CSV log reset</span>`;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 1600);
+          await loadLogs();
+        } else {
+          alert('Reset failed: ' + (data.message || 'unknown'));
+        }
+      } catch (e) {
+        alert('Failed to reset log: ' + e.message);
+      }
+    }
+
+    async function downloadLogCsv() {
+      try {
+        const res = await fetch('/api/download-log');
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error('HTTP ' + res.status + (text ? ': ' + text : ''));
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'processing_log.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Failed to download log CSV: ' + e.message);
+      }
+    }
+
+    function sanitizeForFilename(s) {
+      if (!s) return 'unknown';
+      return String(s).replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').toLowerCase().replace(/^_|_$/g, '') || 'unknown';
+    }
+
+    function downloadOutputJson(fileId, downloadName) {
+      // Force download the generated output JSON template
+      // fileId = actual file on server (from Template column)
+      // downloadName = nice name following the rule (computed from row data)
+      if (!fileId) return;
+      let url = `${window.location.origin}/api/download/processed/${encodeURIComponent(fileId)}`;
+      if (downloadName) {
+        url += `?download_name=${encodeURIComponent(downloadName)}`;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = downloadName || fileId;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function loadLogs() {
+      const tbody = document.getElementById('log-tbody');
+      tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-400 text-xs">Loading...</td></tr>`;
+
+      try {
+        const res = await fetch('/api/logs');
+        const data = await res.json();
+        const logs = data.logs || [];
+
+        if (logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-400 text-xs">No entries yet. Process a file above.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = logs.map(log => {
+          // New columns from CSV (with "Processed At" added)
+          const processedAt = log["Processed At"] || log["processed at"] || '';
+          const clientName = log["Client Name"] || log["clientname"] || '';
+          const product = log["Product"] || log["product"] || '';
+          const qty = log["Qty"] || log["qty"] || '';
+          const dateJoin = log["Date Join"] || log["date join"] || '';
+          const templateFile = log["Template"] || log["template"] || '';
+          const email = log["Client Email"] || log["client email"] || log["email"] || '';
+
+          // Extract the actual file identifier from the Template column (for locating the file on server)
+          let fileId = '';
+          if (templateFile) {
+            fileId = templateFile.split(/[\\/]/).pop();
+          }
+
+          // Template cell: show the stored name (for reference)
+          const templateCell = fileId 
+            ? `<span class="font-mono text-[10px] text-emerald-700" title="${templateFile}">${fileId}</span>` 
+            : '';
+
+          // Build the nice download filename following the exact rule: {today.date_clientname_product_qty}.json
+          // Use date from Processed At if available, otherwise today's date
+          let datePart = '';
+          if (processedAt) {
+            datePart = processedAt.split(' ')[0].replace(/-/g, '');
+          } else {
+            const d = new Date();
+            datePart = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+          }
+          const dlClient = sanitizeForFilename(clientName);
+          const dlProduct = sanitizeForFilename(product);
+          const dlQty = sanitizeForFilename(qty);
+          const downloadName = `${datePart}_${dlClient}_${dlProduct}_${dlQty}.json`;
+
+          // Prominent force-download button for the output JSON
+          // Pass both the server fileId and the desired nice downloadName
+          const actionCell = fileId 
+            ? `<button onclick="downloadOutputJson('${fileId}', '${downloadName}')" 
+                       class="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center gap-x-1 mx-auto">
+                 <i class="fa-solid fa-download text-[10px]"></i>
+                 <span>Download</span>
+               </button>` 
+            : '';
+
+          return `
+            <tr class="border-b last:border-none hover:bg-slate-50">
+              <td class="py-2.5 pr-3 text-xs text-emerald-700 font-mono truncate max-w-[200px]">${templateCell}</td>
+              <td class="py-2.5 pr-3 font-medium text-slate-700 truncate max-w-[140px]">${clientName}</td>
+              <td class="py-2.5 pr-3 text-slate-600 truncate max-w-[120px]">${product}</td>
+              <td class="py-2.5 px-3 text-right font-semibold text-slate-700">${qty}</td>
+              <td class="py-2.5 text-xs text-slate-500 truncate max-w-[160px]">${email}</td>
+              <td class="py-2.5 pr-3 text-xs text-slate-500 font-mono">${processedAt}</td>
+              <td class="py-2.5 px-3 text-xs text-slate-500">${dateJoin}</td>
+              <td class="py-2.5 px-1 text-center">${actionCell}</td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-4 text-center text-red-400 text-xs">Failed to load logs</td></tr>`;
+      }
+    }
+
+    function resetUI() {
+      // Clear current selection and hide results
+      document.getElementById('results-section').classList.add('hidden');
+      clearSelectedFile();
+      lastProcessedResult = null;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Keyboard support: press "p" to process when file selected
+    function setupKeyboard() {
+      document.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'p' && !document.getElementById('process-btn').disabled) {
+          e.preventDefault();
+          processFile();
+        }
+      });
+    }
+
+    // Boot everything
+    function init() {
+      initTailwind();
+      setupUploadZone();
+      setupKeyboard();
+      loadLogs();
+
+      // Optional: nice welcome message in console
+      console.log('%c[JSON Processor] Local test tool ready. Backend on http://localhost:8000', 'color:#64748b');
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

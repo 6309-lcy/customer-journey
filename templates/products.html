@@ -28,7 +28,6 @@
           <th data-sort class="px-6 py-4 text-left font-medium text-slate-500">Sub Type Product Name</th>
           <th data-sort class="px-6 py-4 text-left font-medium text-slate-500">Main Type</th>
           <th class="px-6 py-4 text-left font-medium text-slate-500">Sub Type</th>
-          <th class="px-6 py-4 text-left font-medium text-slate-500">Specs</th>
           <th class="px-6 py-4 text-left font-medium text-slate-500">Clients</th>
         </tr>
       </thead>
@@ -38,7 +37,6 @@
           <td class="px-6 py-4 font-medium">{{ p.name }}</td>
           <td class="px-6 py-4">{{ p.type or p.category or '—' }}</td>
           <td class="px-6 py-4 text-slate-500">{{ p.sub_type or '—' }}</td>
-          <td class="px-6 py-4 text-slate-500">{{ (p.specs | join(', ')) if p.specs else '—' }}</td>
           <td class="px-6 py-4">
             {% if p.client_names %}
               <div class="flex -space-x-1">
