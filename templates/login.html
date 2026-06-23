@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-md mx-auto mt-16">
+  <div class="bg-white border border-slate-200 rounded-3xl p-8">
+    <h1 class="text-2xl font-semibold tracking-tight mb-1">Sign in</h1>
+    <p class="text-sm text-slate-500 mb-6">Demo access for external / ngrok users</p>
+
+    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs">
+      <strong>Demo credentials (full app + MySQL operations):</strong><br>
+      Username: <code>admin</code><br>
+      Password: <code>cj2026demo</code><br>
+      <span class="text-amber-600">This account uses the app's MySQL connection (ensure your .env DB user has full privileges for CREATE/INSERT/ALTER on the cj DB).</span>
+    </div>
+
+    <form method="post" action="{{ url_for('login') }}">
+      <input type="text" name="username" placeholder="Username" class="w-full border px-4 py-2.5 rounded-2xl mb-3" value="admin" required>
+      <input type="password" name="password" placeholder="Password" class="w-full border px-4 py-2.5 rounded-2xl mb-3" value="cj2026demo" required>
+      <button class="w-full py-2.5 bg-slate-900 text-white rounded-2xl">Sign in</button>
+    </form>
+    <p class="text-[10px] text-slate-400 mt-3">After login you have full access to Clients / Products / Clusters and JSON tools.</p>
+  </div>
+</div>
+{% endblock %}

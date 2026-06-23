@@ -1099,6 +1099,9 @@ def ensure_new_feature_tables():
             FOREIGN KEY (json_template_id) REFERENCES json_templates(id) ON DELETE CASCADE
         )
     """)
+    try:
+        _execute("ALTER TABLE product_json_files ADD UNIQUE KEY uniq_product_template (product_id, json_template_id)")
+    except: pass
 
     # Helpful indexes (IF NOT EXISTS not supported in older MySQL for indexes, so ignore errors)
     try:
@@ -1337,12 +1340,11 @@ def save_client_json_send(client_id: int, uploaded_file=None, product: str = Non
     base = _clean_part(product or "Template")
     if not base:
         base = "Template"
-    spec_part = datetime.now().date()
-    # if product_specs:
-    #     cleaned = [_clean_part(s) for s in product_specs if s and str(s).strip()]
-    #     if cleaned:
-    #         spec_part = "_" + "_".join(cleaned)[:80]
-    derived_name = f"{base}{spec_part}.json"
+    if override_filename:
+        derived_name = override_filename
+    else:
+        spec_part = datetime.now().date()
+        derived_name = f"{base}{spec_part}.json"
     if not derived_name.lower().endswith(".json"):
         derived_name += ".json"
     if derived_name == ".json":
@@ -1534,7 +1536,49 @@ def get_product_json_files(product_id: int) -> list[dict]:
                     "file_path": jt.get("file_path"),
                     "json_template_id": s.get("json_template_id")
                 })
-        return matches
+        # normalize demo too
+        for m in matches:
+            sp = m.get("specs") or {}
+            if isinstance(sp, list):
+                tmp = {}
+                for it in sp:
+                    if isinstance(it, str) and ":" in it:
+                        kk, vv = [x.strip() for x in it.split(":", 1)]
+                        tmp[kk.lower().replace(" ", "_")] = vv.strip()
+                sp = tmp
+                m["specs"] = sp
+            if isinstance(sp, dict):
+                if "front" in sp and "front_design" not in sp:
+                    sp["front_design"] = sp["front"]
+                if "back" in sp and "back_design" not in sp:
+                    sp["back_design"] = sp["back"]
+            m["quantity"] = sp.get("quantity") or sp.get("size_of_deck") or "—"
+            m["card_stock"] = sp.get("card_stock") or sp.get("Card Stock") or "—"
+            m["packaging"] = sp.get("packaging") or sp.get("Packaging") or "—"
+            m["custom"] = sp.get("custom") or sp.get("type_sel") or "Custom"
+            m["front_design"] = sp.get("front_design") or sp.get("Front") or sp.get("front") or "—"
+            m["back_design"] = sp.get("back_design") or sp.get("Back") or sp.get("back") or "—"
+            # map short to friendly
+            if str(m.get('front_design', '')).lower() == 'same':
+                m['front_design'] = 'Same for all front'
+            elif str(m.get('front_design', '')).lower() == 'different':
+                m['front_design'] = 'Different for all front'
+            if str(m.get('back_design', '')).lower() == 'same':
+                m['back_design'] = 'Same for all back'
+            elif str(m.get('back_design', '')).lower() == 'different':
+                m['back_design'] = 'Different for all backs'
+            try:
+                import os
+                m["download_filename"] = os.path.basename(m.get("file_path") or m.get("template_name") or "")
+            except:
+                m["download_filename"] = m.get("template_name")
+        # dedup by template to prevent duplicate rows for same JSON
+        dedup = {}
+        for m in matches:
+            tid = m.get("json_template_id")
+            if tid not in dedup:
+                dedup[tid] = m
+        return list(dedup.values())
     try:
         rows = _query("""
             SELECT pjf.id, pjf.specs, jt.name as template_name, jt.file_path, jt.id as json_template_id
@@ -1549,11 +1593,195 @@ def get_product_json_files(product_id: int) -> list[dict]:
                     r["specs"] = json.loads(r["specs"])
                 except:
                     r["specs"] = []
-        return rows
+            # normalize to flat for product profile table columns
+            sp = r.get("specs") or {}
+            if isinstance(sp, list):
+                tmp = {}
+                for it in sp:
+                    if isinstance(it, str) and ":" in it:
+                        kk, vv = [x.strip() for x in it.split(":", 1)]
+                        tmp[kk.lower().replace(" ", "_")] = vv.strip()
+                sp = tmp
+            if isinstance(sp, dict):
+                if "front" in sp and "front_design" not in sp:
+                    sp["front_design"] = sp["front"]
+                if "back" in sp and "back_design" not in sp:
+                    sp["back_design"] = sp["back"]
+            r["quantity"] = sp.get("quantity") or sp.get("size_of_deck") or sp.get("Size of deck") or "—"
+            r["card_stock"] = sp.get("card_stock") or sp.get("Card Stock") or "—"
+            r["packaging"] = sp.get("packaging") or sp.get("Packaging") or "—"
+            r["custom"] = sp.get("custom") or sp.get("type_sel") or sp.get("Type") or "Custom"
+            r["front_design"] = sp.get("front_design") or sp.get("Front") or sp.get("image_text_front") or sp.get("front") or "—"
+            r["back_design"] = sp.get("back_design") or sp.get("Back") or sp.get("image_text_back") or sp.get("back") or "—"
+            # map short to friendly
+            if str(r.get('front_design', '')).lower() == 'same':
+                r['front_design'] = 'Same for all front'
+            elif str(r.get('front_design', '')).lower() == 'different':
+                r['front_design'] = 'Different for all front'
+            if str(r.get('back_design', '')).lower() == 'same':
+                r['back_design'] = 'Same for all back'
+            elif str(r.get('back_design', '')).lower() == 'different':
+                r['back_design'] = 'Different for all backs'
+            # filename for download
+            if r.get("file_path"):
+                try:
+                    import os
+                    r["download_filename"] = os.path.basename(r["file_path"])
+                except:
+                    r["download_filename"] = r.get("template_name")
+            else:
+                r["download_filename"] = r.get("template_name")
+        # dedup by json_template_id so same JSON doesn't appear multiple times in product table
+        deduped = []
+        seen = set()
+        for r in rows:
+            tid = r.get("json_template_id")
+            if tid in seen:
+                continue
+            seen.add(tid)
+            deduped.append(r)
+        return deduped
     except Exception as e:
         if "1146" in str(e) or "doesn't exist" in str(e).lower():
             return []
         raise
+
+
+def execute_raw(sql, params=()):
+    """Internal raw execute exposed for app routes (e.g. direct product json link)."""
+    return _execute(sql, params)
+
+def find_matching_json_template(specs: dict, product: str = None):
+    """Return matching json template (with file info) if the key specs match exactly on the 6 fields for the product.
+    The 6 fields: Quantity, Card Stock, Packaging, Custom, Front Design, Back Design
+    """
+    if not specs:
+        return None
+
+    def _canon_key(k):
+        k = str(k or "").lower().replace(" ", "_").replace("-", "_")
+        if k in ("size_of_deck", "size of deck", "deck_size"):
+            return "quantity"
+        if k in ("front", "front design", "image_text_front"):
+            return "front_design"
+        if k in ("back", "back design", "image_text_back"):
+            return "back_design"
+        if k in ("type_sel", "type"):
+            return "custom"
+        return k
+
+    norm = {}
+    for k in ("quantity", "card_stock", "packaging", "custom", "front_design", "back_design"):
+        v = specs.get(k) or specs.get(_canon_key(k)) or specs.get(k.replace("_", " ").title()) or specs.get(k.replace("_", " "))
+        if v is not None:
+            norm[k] = str(v).strip().lower()
+    if not norm:
+        return None
+
+    if _DEMO_MODE:
+        for s in _DEMO_CLIENT_JSON_SENDS:
+            if product and (s.get("product") or "") != product:
+                continue
+            sp = s.get("product_specs") or {}
+            if isinstance(sp, str):
+                try: sp = json.loads(sp)
+                except: sp = {}
+            if isinstance(sp, list):
+                tmp = {}
+                for it in sp:
+                    if isinstance(it, str) and ":" in it:
+                        kk, vv = [x.strip() for x in it.split(":", 1)]
+                        ckk = _canon_key(kk)
+                        tmp[ckk] = str(vv).strip()
+                sp = tmp
+            if isinstance(sp, dict):
+                for oldk in list(sp.keys()):
+                    ckk = _canon_key(oldk)
+                    if ckk != oldk:
+                        sp[ckk] = sp.get(ckk) or sp[oldk]
+            ok = True
+            for k, v in norm.items():
+                sv = str(sp.get(k, "")).strip().lower()
+                if sv != v:
+                    ok = False
+                    break
+            if ok:
+                jt = next((t for t in _DEMO_JSON_TEMPLATES if t.get("id") == s.get("json_template_id")), {})
+                return {
+                    "id": s.get("json_template_id"),
+                    "name": jt.get("name"),
+                    "file_path": jt.get("file_path"),
+                    "template_name": jt.get("name"),
+                    "specs": sp
+                }
+        return None
+
+    try:
+        # load recent templates + their specs + product context
+        if product:
+            rows = _query("""
+                SELECT jt.id, jt.name, jt.file_path, pjf.specs as ps, cjs.product_specs as cs, 
+                       cjs.product as cjs_product, pr.name as pjf_product
+                FROM json_templates jt
+                LEFT JOIN product_json_files pjf ON pjf.json_template_id=jt.id
+                LEFT JOIN products pr ON pr.id = pjf.product_id
+                LEFT JOIN client_json_sends cjs ON cjs.json_template_id=jt.id
+                WHERE (cjs.product = %s OR pr.name = %s)
+                ORDER BY jt.id DESC LIMIT 300
+            """, (product, product)) or []
+        else:
+            rows = _query("""
+                SELECT jt.id, jt.name, jt.file_path, pjf.specs as ps, cjs.product_specs as cs, 
+                       cjs.product as cjs_product, pr.name as pjf_product
+                FROM json_templates jt
+                LEFT JOIN product_json_files pjf ON pjf.json_template_id=jt.id
+                LEFT JOIN products pr ON pr.id = pjf.product_id
+                LEFT JOIN client_json_sends cjs ON cjs.json_template_id=jt.id
+                ORDER BY jt.id DESC LIMIT 300
+            """) or []
+        seen = set()
+        for r in rows:
+            tid = r.get("id")
+            if tid in seen: continue
+            p_prod = r.get("cjs_product") or r.get("pjf_product") or ""
+            if product and p_prod and p_prod != product:
+                continue
+            sp = r.get("ps") or r.get("cs") or {}
+            if isinstance(sp, str):
+                try: sp = json.loads(sp)
+                except: sp = {}
+            if isinstance(sp, list):
+                tmp = {}
+                for it in sp:
+                    if isinstance(it, str) and ":" in it:
+                        kk, vv = [x.strip() for x in it.split(":", 1)]
+                        ckk = _canon_key(kk)
+                        tmp[ckk] = str(vv).strip()
+                sp = tmp
+            if isinstance(sp, dict):
+                for oldk in list(sp.keys()):
+                    ckk = _canon_key(oldk)
+                    if ckk != oldk:
+                        sp[ckk] = sp.get(ckk) or sp[oldk]
+            ok = True
+            for k, v in norm.items():
+                sv = str(sp.get(k, sp.get(k.replace("_"," "), ""))).strip().lower()
+                if sv != v:
+                    ok = False
+                    break
+            if ok:
+                seen.add(tid)
+                return {
+                    "id": tid,
+                    "name": r.get("name"),
+                    "file_path": r.get("file_path"),
+                    "template_name": r.get("name"),
+                    "specs": sp,
+                    "product": p_prod or r.get("cjs_product")
+                }
+        return None
+    except Exception:
+        return None
 
 
 def search_json_templates_by_products(product_names: list[str]) -> list[dict]:

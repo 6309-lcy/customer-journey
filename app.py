@@ -5,7 +5,7 @@ import re
 import os
 import json
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, session
 from werkzeug.utils import secure_filename
 
 import database
@@ -17,6 +17,16 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "dev-secret-change-in-prod")
 app.config["UPLOAD_FOLDER"] = database.UPLOAD_DIR
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+# Demo login (popup-style login page + creds printed for external ngrok demo)
+DEMO_USER = "admin"
+DEMO_PASS = "cj2026demo"
+
+@app.before_request
+def require_login():
+    open_endpoints = {"login", "static", "download_json"}
+    if request.endpoint not in open_endpoints and not session.get("logged_in"):
+        return redirect(url_for("login", next=request.url))
 
 # Simple allowed extensions for JSON
 ALLOWED_EXT = {"json", "txt"}
@@ -73,7 +83,65 @@ def process_json_config(config: dict) -> dict:
         ]
 
     third_order_id = "replace_with_your_order_number"
-
+    packaging = {}
+    if config.get("packaging") == "Custom Tin Box":
+        packaging = [
+            {
+                "Side": "Top", "image" : image_link
+            },
+            {
+                "Side": "Bottom", "image" : image_link
+            }
+        ]
+    elif config.get("packaging") == "Custom Tuck Box":
+        ## should be non null
+        if config.get("tuck_extra") == "Outside":
+            packaging = [
+                {
+                    "side" : "Dynamic_tuck_box_outside",
+                    "materialPath" : material_path,
+                    "pageContentDesigns": [
+                        {
+                            "pageContentIndex" :0,
+                            "effect": effect,
+                            "image" :image_link
+                        }
+                    ]
+                }
+            ]
+        else : 
+             packaging = [
+                {
+                    "side" : "Dynamic_tuck_box_outside",
+                    "materialPath" : material_path,
+                    "pageContentDesigns": [
+                        {
+                            "pageContentIndex" :0,
+                            "effect": effect,
+                            "image" :image_link
+                        }
+                    ],
+                    "side" : "Dynamic_tuck_box_inside",
+                    "materialPath" : material_path,
+                    "pageContentDesigns": [
+                        {
+                            "pageContentIndex" :0,
+                            "effect": effect,
+                            "image" :image_link
+                        }
+                    ]
+                }
+            ]
+    elif config.get("packaging") == "Custom Tin Box":
+        packaging = [
+            {"side":"Top", "image": image_link},
+            {"side" : "Bottom", "image" : image_link}
+        ]
+    else: #booster pack
+        packaging = [
+            {"side":"Booster_Pack", "image": image_link}
+        ]
+        
     base_item = {
         "thirdOrderItemId": third_order_id,
         "qty": quantity,
@@ -95,9 +163,8 @@ def process_json_config(config: dict) -> dict:
                     "pageContentDesigns": list(page_content_designs_back)
                 }
             ],
-            "content": [
-                {"side": "Booster_Pack", "image": image_link}
-            ]
+            "content": packaging
+            
         }
     }
 
@@ -420,6 +487,26 @@ def add_comm(client_id: int):
             flash(f"Failed: {e}", "error")
     return redirect(url_for("client_profile", client_id=client_id))
 
+@app.route("/api/check_existing_json", methods=["POST"])
+def api_check_existing_json():
+    """Sub function for client gen: compare specs (incl qty) before generate."""
+    spec = {
+        "quantity": request.form.get("size_deck") or request.form.get("quantity"),
+        "card_stock": request.form.get("card_stock"),
+        "packaging": request.form.get("packaging"),
+        "custom": request.form.get("type_sel") or request.form.get("custom") or "Custom",
+        "front_design": request.form.get("image_text_front") or request.form.get("front_design"),
+        "back_design": request.form.get("image_text_back") or request.form.get("back_design"),
+    }
+    prod = request.form.get("product")
+    match = database.find_matching_json_template(spec, prod)
+    if match:
+        fname = match.get("template_name") or match.get("name") or "template.json"
+        match["download_url"] = url_for("download_json", filename=fname)
+        return jsonify({"match": True, "template": match})
+    return jsonify({"match": False})
+
+
 @app.route("/client/<int:client_id>/add_json", methods=["POST"])
 def add_json_for_client(client_id: int):
     # New flow: detailed form fields from JSON tab (no uploaded file required)
@@ -433,8 +520,9 @@ def add_json_for_client(client_id: int):
     finish = request.form.get("finish") or ""
     packaging = request.form.get("packaging") or ""
     seal = request.form.get("seal") or ""
-    eff =request.form.get("effect") or ""
+    eff =request.form.get("effect") or "CMYK"
     card_sel = request.form.get("card_selection_mode") or ""
+    type_sel = request.form.get("type_sel") or "Custom"
     store_pt = request.form.get("store_product_type") or ""
     img_front = request.form.get("image_text_front") or ""
     img_back = request.form.get("image_text_back") or ""
@@ -456,7 +544,7 @@ def add_json_for_client(client_id: int):
         if qty_i < 1: qty_i = 1
     except:
         qty_i = 1
-    summary.append(f"Size of deck: {qty_i}")
+    summary.append(f"Quantity: {qty_i}")
     if printing:
         summary.append(f"Printing: {printing}")
     if finish:
@@ -467,10 +555,11 @@ def add_json_for_client(client_id: int):
         summary.append(f"Seal: {seal}")
     if card_sel:
         summary.append(f"Card Selection: {card_sel}")
+    summary.append(f"Custom: {type_sel}")
     if img_front:
-        summary.append(f"Front: {img_front}")
+        summary.append(f"Front Design: {img_front}")
     if img_back:
-        summary.append(f"Back: {img_back}")
+        summary.append(f"Back Design: {img_back}")
     if eff:
         summary.append(f"Effect: {eff}")
 
@@ -504,18 +593,67 @@ def add_json_for_client(client_id: int):
         flash("Please select a Sub Type Product.", "error")
         return redirect(url_for("client_profile", client_id=client_id))
 
+    # REUSE support (from comparison "yes, download existing + update history")
+    # IMPORTANT: matching is now scoped to the *product* (same Sub Type Product), not per-client.
+    # So Client B requesting identical specs for the same product as Client A will reuse Client A's file.
+    # A new client_json_sends row is added so the JSON template history includes both clients.
+    reuse_tid = request.form.get("reuse_template_id")
+    if reuse_tid:
+        try:
+            tid = int(reuse_tid)
+            sp_json = json.dumps(specs_for_record) if specs_for_record else None
+            if database.is_demo_mode():
+                new_sid = max([s.get("id",0) for s in getattr(database, '_DEMO_CLIENT_JSON_SENDS', [])], default=0) + 1
+                getattr(database, '_DEMO_CLIENT_JSON_SENDS', []).append({
+                    "id": new_sid, "client_id": client_id, "json_template_id": tid,
+                    "sent_date": datetime.now().strftime("%Y-%m-%d"), "product": product, "product_specs": specs_for_record or []
+                })
+            else:
+                database._execute(
+                    "INSERT INTO client_json_sends (client_id, json_template_id, sent_date, product, product_specs) VALUES (%s, %s, CURDATE(), %s, %s)",
+                    (client_id, tid, product, sp_json)
+                )
+            try:
+                database.add_communication_log(client_id, datetime.now().strftime("%Y-%m-%d"), f"Reused existing JSON for {product}")
+            except: pass
+            fname = "template.json"
+            try:
+                for t in (database.get_all_json_templates() or []):
+                    if t.get("id") == tid: fname = t.get("name") or fname
+            except: pass
+            return jsonify({"success": True, "reused": True, "download_url": url_for("download_json", filename=fname)})
+        except Exception as ex:
+            return jsonify({"success": False, "error": str(ex)}), 400
+
     # Build short config exactly like json-processor's "new request.json"
+    tuck_extra = request.form.get("tuck_extra") or ""
+    if packaging in ["Custom Tuck Box", "Custom Tin Box"]:
+
+        raw_prop = {
+            "back design mode": back_mode,
+            "front design mode": front_mode,
+            "Customized Model" : "Easy"
+        }
+    else :
+        raw_prop = {
+            "back design mode": back_mode,
+            "front design mode": front_mode
+            
+        }
+
+
     client_obj = database.fetch_client(client_id) or {}
+    eff = request.form.get("printing_effect") or request.form.get("finish") or ""
+    tuck_extra = request.form.get("tuck_extra") or ""
     short_config = {
         "clientname": client_obj.get("name") or f"client_{client_id}",
         "product": product,
         "qty": qty_i,
         "material paths": material_paths,
-        "properties": {
-            "back design mode": back_mode,
-            "front design mode": front_mode
-        },
-        "printing_effects" : eff
+        "properties": raw_prop,
+        "printing_effects" : eff,
+        "packaging": packaging,
+        "tuck-extra" : tuck_extra
     }
 
     # Generate using the ported mechanism (returns the template directly)
@@ -525,6 +663,17 @@ def add_json_for_client(client_id: int):
         flash(f"Failed to generate from processor: {ex}", "error")
         return redirect(url_for("client_profile", client_id=client_id))
 
+    # compute derived for response/download (override used in save)
+    def _c(s):
+        s = str(s or "").encode('ascii', 'ignore').decode('ascii')
+        s = re.sub(r'[^\w\-.]', '_', s)
+        s = re.sub(r'_+', '_', s).strip('_') or "part"
+        return s
+    base = _c(product or "Template")
+    derived_name = f"{base}{datetime.now().strftime('%Y%m%d')}.json"
+    if not derived_name.lower().endswith(".json"):
+        derived_name += ".json"
+
     try:
         # Save the final *template* (no "json" wrapper)
         tid = database.save_client_json_send(
@@ -532,11 +681,17 @@ def add_json_for_client(client_id: int):
             uploaded_file=None,
             product=product,
             product_specs=specs_for_record,
-            generated_json=template_json
+            generated_json=template_json,
+            override_filename=derived_name
         )
-        # For the JS fetch path (new generator UI) respond with JSON so fetch sees success
+        # auto comm log on generate
+        try:
+            event = f"Generated JSON template for {product} (qty:{qty_i}, card_stock:{card_stock}, packaging:{packaging})"
+            database.add_communication_log(client_id, datetime.now().strftime("%Y-%m-%d"), event)
+        except: pass
+        # JS fetch path: no redirect, return download info
         if request.form.get("card_stock") or request.form.get("material_card_stock"):
-            return jsonify({"success": True})
+            return jsonify({"success": True, "download_url": url_for("download_json", filename=derived_name)})
         flash("JSON template generated via processor and sent.", "success")
     except Exception as e:
         if request.form.get("card_stock") or request.form.get("material_card_stock"):
@@ -627,6 +782,67 @@ def add_product():
         flash(f"Add product failed: {e}", "error")
     return redirect(url_for("products_page"))
 
+@app.route("/product/<int:product_id>/upload_json", methods=["POST"])
+def upload_json_for_product(product_id: int):
+    """Upload JSON under a product with column metadata (same dropdown style as client profile)."""
+    uploaded = request.files.get("json_file")
+    qty = request.form.get("quantity") or request.form.get("size_deck") or "1"
+    card = request.form.get("card_stock") or ""
+    packg = request.form.get("packaging") or ""
+    cust = request.form.get("custom") or request.form.get("type_sel") or "Custom"
+    front = request.form.get("front_design") or request.form.get("image_text_front") or ""
+    back = request.form.get("back_design") or request.form.get("image_text_back") or ""
+
+    if not uploaded or not allowed_file(uploaded.filename):
+        flash("Select a valid .json file.", "error")
+        return redirect(url_for("product_profile", product_id=product_id))
+
+    uploaded.filename = sanitize_filename(uploaded.filename)
+
+    specs_dict = {
+        "quantity": qty,
+        "card_stock": card,
+        "packaging": packg,
+        "custom": cust,
+        "front_design": front,
+        "back_design": back
+    }
+
+    try:
+        # derive + save file + template + link to product (no client send needed)
+        def _c(s):
+            s = str(s or "").encode('ascii','ignore').decode('ascii')
+            s = re.sub(r'[^\w\-.]', '_', s)
+            return re.sub(r'_+', '_', s).strip('_') or "part"
+        base = _c( "Product" + str(product_id) )
+        derived = f"{base}{datetime.now().strftime('%Y%m%d')}.json"
+        if not derived.lower().endswith(".json"): derived += ".json"
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], derived)
+        with open(save_path, "wb") as f:
+            uploaded.stream.seek(0)
+            f.write(uploaded.stream.read())
+
+        tid = 10000 + product_id
+        try:
+            if not database.is_demo_mode():
+                tid = database.execute_raw("INSERT INTO json_templates (name, file_path) VALUES (%s, %s)", (derived, save_path))
+                database.execute_raw(
+                    "INSERT INTO product_json_files (product_id, specs, json_template_id) VALUES (%s, %s, %s)",
+                    (product_id, json.dumps(specs_dict), tid)
+                )
+            else:
+                # demo: append fake entry so table can pick it in some flows
+                database._DEMO_JSON_TEMPLATES.append({"id": tid, "name": derived, "file_path": "DEMO:" + derived})
+        except Exception:
+            pass
+        flash("JSON uploaded and linked to product.", "success")
+    except Exception as e:
+        flash(f"Upload failed: {e}", "error")
+
+    return redirect(url_for("product_profile", product_id=product_id))
+
+
 @app.route("/product/<int:product_id>")
 def product_profile(product_id: int):
     try:
@@ -657,6 +873,40 @@ def product_profile(product_id: int):
     json_files = []
     try:
         json_files = database.get_product_json_files(product_id) or []
+        for jf in json_files:
+            # ensure flat keys exist for the 6-col table
+            sp = jf.get('specs') or {}
+            if isinstance(sp, (str, bytes)):
+                try: sp = json.loads(sp)
+                except: sp = {}
+            if isinstance(sp, list):
+                d = {}
+                for it in sp:
+                    if isinstance(it,str) and ':' in it: 
+                        k,v = [x.strip() for x in it.split(':',1)]; d[k.lower().replace(' ','_')] = v
+                sp = d
+            if isinstance(sp, dict):
+                if "front" in sp and "front_design" not in sp:
+                    sp["front_design"] = sp["front"]
+                if "back" in sp and "back_design" not in sp:
+                    sp["back_design"] = sp["back"]
+            jf.setdefault('quantity', sp.get('quantity') or sp.get('size_of_deck') or '—')
+            jf.setdefault('card_stock', sp.get('card_stock') or sp.get('Card Stock') or '—')
+            jf.setdefault('packaging', sp.get('packaging') or sp.get('Packaging') or '—')
+            jf.setdefault('custom', sp.get('custom') or sp.get('type_sel') or 'Custom')
+            jf.setdefault('front_design', sp.get('front_design') or sp.get('Front') or sp.get('front') or '—')
+            jf.setdefault('back_design', sp.get('back_design') or sp.get('Back') or sp.get('back') or '—')
+            # map short internal mode to friendly display value
+            fd = str(jf.get('front_design', '')).lower()
+            if fd == 'same':
+                jf['front_design'] = 'Same for all front'
+            elif fd == 'different':
+                jf['front_design'] = 'Different for all front'
+            bd = str(jf.get('back_design', '')).lower()
+            if bd == 'same':
+                jf['back_design'] = 'Same for all back'
+            elif bd == 'different':
+                jf['back_design'] = 'Different for all backs'
     except:
         pass
 
@@ -668,6 +918,36 @@ def product_profile(product_id: int):
         clients=clients,
         json_files=json_files,
     )
+@app.route("/products/delete/<int:product_id>", methods=["DELETE", "POST"])
+def delete_product(product_id: int):
+    try:
+        # Check for dependencies
+        clients = database.get_clients_for_product(product_id) or []
+        if clients:
+            return jsonify({
+                "success": False,
+                "error": f"Cannot delete product. It is currently used by {len(clients)} client(s)."
+            }), 400
+
+        # Perform deletion
+        success = database.delete_product(product_id)
+
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Product deleted successfully."
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Product not found or could not be deleted."
+            }), 404
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 # JSON history popup data (AJAX friendly)
 @app.route("/json/<int:json_template_id>/history")
@@ -781,6 +1061,28 @@ def delete_cluster(cluster_name: str):
                 pass
     flash(f"Unassigned {count} clients from '{cluster_name}'. (Cluster label removed)", "success")
     return redirect(url_for("clusters_page"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        u = (request.form.get("username") or "").strip()
+        p = (request.form.get("password") or "").strip()
+        if u == DEMO_USER and p == DEMO_PASS:
+            session["logged_in"] = True
+            session["user"] = u
+            flash("Logged in with full privileges (demo admin). MySQL operations available via the configured DB user.")
+            nxt = request.args.get("next") or url_for("clients_page")
+            return redirect(nxt)
+        flash("Invalid credentials. Use the printed demo account.")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("Logged out.")
+    return redirect(url_for("login"))
 
 # ----------------------------------------------------------
 # Simple seed for MySQL (call manually if needed)

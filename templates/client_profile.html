@@ -310,17 +310,20 @@
                 <div>
                   <label class="text-xs text-slate-500">Packaging Finish</label>
                   <select id="packaging_finish" name="packaging_finish" class="w-full border px-3 py-2 rounded-2xl text-sm">
-                    <option>Matte</option>
-                    <option>Gloss</option>
-                    <option>Soft Touch</option>
+                    <option>T30 UV coated (gloss)</option>
+                    <option>T30 Aqueous (matte)</option>
+                    <option>T25 100% recycled, Aqueous (matte)</option>
+                    <option>T27 Eco Herbage, Aqueous (matte)</option>
                   </select>
                 </div>
                 <div>
                   <label class="text-xs text-slate-500">Printing effect</label>
                   <select id="printing_effect" name="printing_effect" class="w-full border px-3 py-2 rounded-2xl text-sm">
-                    <option>Standard</option>
-                    <option>Foil</option>
-                    <option>Emboss</option>
+                    <option>Full Color Print</option>
+                    <option>Gold foil Stamping</option>
+                    <option>Silver foil Stamping</option>
+                    <option>Embossing</option>
+                    <option>Gold Foil Stamping + Embossing</option>
                   </select>
                 </div>
                 <div>
@@ -397,6 +400,20 @@
               <button type="button" onclick="confirmAndGenerateJson()" class="flex-1 py-2 bg-slate-900 text-white rounded-2xl text-sm">Generate &amp; Save Final JSON</button>
             </div>
             <div class="mt-2 text-[10px] text-slate-400">Uses the json-processor mechanism. Only the template is saved as the final file.</div>
+          </div>
+        </div>
+
+        <!-- Reuse / existing match modal (for client gen comparison) -->
+        <div id="reuse-modal" onclick="hideReuseModal()" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-[90]">
+          <div onclick="event.stopImmediatePropagation()" class="bg-white w-full max-w-md mx-4 rounded-3xl p-6 modal">
+            <div class="font-semibold mb-2">Matching JSON template found</div>
+            <div class="text-xs text-slate-500 mb-2">Existing file with same specs (incl. quantity). Does it fit your requirement?</div>
+            <pre id="reuse-specs" class="text-xs bg-slate-50 p-3 rounded-xl mb-3 max-h-32 overflow-auto"></pre>
+            <div class="flex gap-3">
+              <button onclick="reuseYes()" class="flex-1 py-2 bg-emerald-600 text-white rounded-2xl text-sm">Yes - Download existing (update history)</button>
+              <button onclick="reuseNo()" class="flex-1 py-2 border rounded-2xl text-sm">No - Generate new</button>
+            </div>
+            <button onclick="hideReuseModal()" class="mt-2 w-full text-xs text-slate-500">Close</button>
           </div>
         </div>
 
@@ -493,6 +510,9 @@ function getPackagingOptionsForSub(sub) {
   if (s.includes('square')) {
     return ["Shrink-wrapped", "Custom Tuck Box"];
   }
+  if (s.includes("playing")) {
+    return ["Custom Rigid box", "Custom Tuck Box", "Custom Tin Box"]
+  }
   // sensible defaults for other subs
   return ["Shrink-wrapped", "Custom Tuck Box", "Custom Paper Booster Packs"];
 }
@@ -573,6 +593,7 @@ function collectJsonConfig() {
     image_text_front: get('image_text_front'),
     image_text_back: get('image_text_back')
   };
+  if (data.packaging== "Custom Tuck Box") data.tuck_extra = get("tuckbox-extra");
   return data;
 }
 
@@ -628,7 +649,76 @@ async function confirmAndGenerateJson() {
     formData.append(k, payload[k]);
   });
 
-  // include client context implicitly via action url
+  // NEW: sub check for existing matching specs (qty + cardstock etc) BEFORE generate
+  try {
+    const checkResp = await fetch('/api/check_existing_json', { method: 'POST', body: formData });
+    const checkData = await checkResp.json();
+    if (checkData && checkData.match && checkData.template) {
+      hideMaterialModal();
+      showReuseModal(checkData.template, formData);  // pass original for no case
+      return;
+    }
+  } catch(e) { /* ignore, proceed to gen */ }
+
+  // normal generate
+  await doGenerate(formData);
+}
+
+var pendingReuseTemplate = null;
+var pendingGenFormData = null;
+
+function showReuseModal(tmpl, originalFormData) {
+  pendingReuseTemplate = tmpl;
+  pendingGenFormData = originalFormData;
+  const modal = document.getElementById('reuse-modal');
+  const pre = document.getElementById('reuse-specs');
+  let txt = '';
+  const sp = tmpl.specs || tmpl;
+  if (sp && typeof sp === 'object') {
+    for (let k in sp) txt += k + ': ' + sp[k] + '\n';
+  } else {
+    txt = JSON.stringify(sp, null, 2);
+  }
+  pre.textContent = txt || 'Matching specs found.';
+  modal.classList.remove('hidden');
+}
+
+function hideReuseModal() {
+  document.getElementById('reuse-modal').classList.add('hidden');
+}
+
+async function reuseYes() {
+  if (!pendingReuseTemplate) return;
+  hideReuseModal();
+  const f = new FormData();
+  f.append('reuse_template_id', pendingReuseTemplate.id || pendingReuseTemplate.json_template_id || '');
+  // include minimal for log
+  if (pendingJsonConfig) {
+    f.append('product', pendingJsonConfig.product || '');
+  }
+  try {
+    const r = await fetch(document.getElementById('json-generate-form').action, {method:'POST', body: f});
+    const d = await r.json();
+    if (d.success && d.download_url) {
+      // download without redirect
+      const a = document.createElement('a');
+      a.href = d.download_url;
+      a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+  } catch(e){ alert('Reuse failed'); }
+  pendingReuseTemplate = null;
+}
+
+async function reuseNo() {
+  hideReuseModal();
+  if (pendingGenFormData) {
+    await doGenerate(pendingGenFormData);
+  }
+  pendingGenFormData = null;
+}
+
+async function doGenerate(formData) {
   try {
     const resp = await fetch(document.getElementById('json-generate-form').action, {
       method: 'POST',
@@ -636,16 +726,21 @@ async function confirmAndGenerateJson() {
     });
     let data = {};
     try { data = await resp.json(); } catch(e) {}
-    if (resp.ok && (data.success !== false)) {
-      window.location.reload();
+    if (resp.ok && data.success) {
+      if (data.download_url) {
+        const a = document.createElement('a');
+        a.href = data.download_url; a.download = '';
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      // no full reload to avoid losing tab; optional small reload for list
+      setTimeout(() => { window.location.reload(); }, 1200);
     } else {
       alert('Generate failed: ' + (data.error || resp.status));
-      hideMaterialModal();
     }
   } catch (err) {
     alert('Network error generating JSON: ' + err);
-    hideMaterialModal();
   }
+  hideMaterialModal();
 }
 
 // Auto init visibility on load if pre-selected somehow

@@ -1,50 +1,120 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="flex gap-8">
-  <!-- LEFT SIDEBAR -->
-  <div class="w-72 shrink-0">
-    <div class="bg-white border border-slate-200 rounded-3xl p-6 sticky top-20">
-      <div class="text-sm text-slate-500">{{ product.type or product.category or '—' }} > {{ product.sub_type or product.subtype or '—' }}</div>
-      <div class="font-semibold text-xl tracking-tight mt-1">{{ product.name }}</div>
-
-      <div class="mt-6 text-xs uppercase tracking-widest text-slate-400">Description</div>
-      <div class="text-sm text-slate-600 mt-1">{{ product.description or 'No description' }}</div>
-
-      <div class="mt-8 text-xs text-slate-400">
-        Clients using this product: <span class="font-medium text-slate-700">{{ clients|length }}</span>
-      </div>
-    </div>
+<!-- FULL WIDTH HEADING (no more 2-col sidebar) -->
+<div class="mb-4 flex items-end justify-between">
+  <div>
+    <div class="text-sm text-slate-500">{{ product.type or product.category or '—' }} > {{ product.sub_type or product.subtype or '—' }}</div>
+    <div class="text-2xl font-semibold tracking-tight">{{ product.name }}</div>
+    <div class="text-xs text-slate-500 mt-1">Clients using: {{ clients|length }} &nbsp; • &nbsp; Click row to view history + download</div>
   </div>
+  <div>
+    <button onclick="showProductUploadModal()" class="px-4 py-2 bg-slate-900 text-white text-sm rounded-2xl">+ Upload JSON</button>
+  </div>
+</div>
 
-  <!-- MAIN: Spec cards + JSONs -->
-  <div class="flex-1">
-    <div class="border border-slate-200 rounded-3xl p-5 mb-5">
+<!-- Search + sort -->
+<div class="flex gap-2 mb-3">
+  <input type="text" id="json-search" placeholder="Search Quantity / Card Stock / Packaging..." oninput="filterJsonTable()" class="border border-slate-200 px-3 py-2 rounded-2xl text-sm flex-1">
+  <select id="json-sort" onchange="sortJsonTable()" class="border border-slate-200 px-3 py-2 rounded-2xl text-sm">
+    <option value="0">Sort: Quantity</option>
+    <option value="1">Sort: Card Stock</option>
+    <option value="2">Sort: Packaging</option>
+    <option value="3">Sort: Custom</option>
+    <option value="4">Sort: Front Design</option>
+    <option value="5">Sort: Back Design</option>
+  </select>
+</div>
 
-      <div class="mb-4 font-medium">Product Specs &amp; JSON Templates</div>
-
-      {% if json_files %}
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {% for jf in json_files %}
-            <div onclick="showJsonHistory({{ jf.json_template_id or 0 }})" 
-                class="cursor-pointer border border-slate-200 bg-white rounded-3xl p-4 hover:border-slate-400 transition">
-              <div class="font-medium">{{ jf.template_name or 'JSON Template' }}</div>
-              {% if jf.specs and jf.specs is iterable and jf.specs is not string %}
-              <div class="text-xs text-slate-400 mt-1">{{ jf.specs | join(' ') }}</div>
-              {% else %}
-              <div class="text-xs text-slate-400 mt-1">{{ jf.specs if jf.specs else '—' }}</div>
-              {% endif %}
-              <div class="text-[10px] mt-4 text-blue-600">Click to view request history &amp; download →</div>
-            </div>
-          {% endfor %}
-        </div>
+<!-- TABULAR JSON list (6 columns) -->
+<div class="bg-white border border-slate-200 rounded-3xl overflow-hidden">
+  <table id="json-table" class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-4 py-3 text-left font-medium text-slate-500 cursor-pointer" onclick="sortJsonTable(0)">Quantity</th>
+        <th class="px-4 py-3 text-left font-medium text-slate-500 cursor-pointer" onclick="sortJsonTable(1)">Card Stock</th>
+        <th class="px-4 py-3 text-left font-medium text-slate-500 cursor-pointer" onclick="sortJsonTable(2)">Packaging</th>
+        <th class="px-4 py-3 text-left font-medium text-slate-500 cursor-pointer" onclick="sortJsonTable(3)">Custom</th>
+        <th class="px-4 py-3 text-left font-medium text-slate-500 cursor-pointer" onclick="sortJsonTable(4)">Front Design</th>
+        <th class="px-4 py-3 text-left font-medium text-slate-500 cursor-pointer" onclick="sortJsonTable(5)">Back Design</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y" id="json-tbody">
+      {% for jf in json_files %}
+      <tr onclick="showJsonHistory({{ jf.json_template_id or 0 }}, '{{ jf.download_filename or jf.template_name or '' }}')" class="cursor-pointer hover:bg-slate-50">
+        <td class="px-4 py-3">{{ jf.quantity or '—' }}</td>
+        <td class="px-4 py-3">{{ jf.card_stock or '—' }}</td>
+        <td class="px-4 py-3">{{ jf.packaging or '—' }}</td>
+        <td class="px-4 py-3">{{ jf.custom or '—' }}</td>
+        <td class="px-4 py-3">{{ jf.front_design or '—' }}</td>
+        <td class="px-4 py-3">{{ jf.back_design or '—' }}</td>
+      </tr>
       {% else %}
-        <div class="text-slate-400">No JSON templates linked to this product yet.</div>
-      {% endif %}
+      <tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">No JSON files for this product yet. Use Upload button.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 
-      <div class="mt-8 text-xs text-slate-400">
-        Click any spec card above to see which clients requested that specific JSON and download it.
-      </div>
+<!-- Upload modal for product (inputs match client profile style + file) -->
+<div id="product-upload-modal" onclick="this.classList.add('hidden')" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-[70]">
+  <div onclick="event.stopImmediatePropagation()" class="bg-white w-full max-w-lg mx-4 rounded-3xl p-6">
+    <div class="flex justify-between mb-4">
+      <div class="font-semibold">Upload JSON for {{ product.name }}</div>
+      <button onclick="document.getElementById('product-upload-modal').classList.add('hidden')" class="text-xl">×</button>
     </div>
+    <form method="post" action="{{ url_for('upload_json_for_product', product_id=product.id) }}" enctype="multipart/form-data" class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">Quantity (Size of deck)</label>
+          <input name="quantity" type="number" min="1" value="52" class="w-full border px-3 py-2 rounded-2xl text-sm">
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Card Stock</label>
+          <select name="card_stock" class="w-full border px-3 py-2 rounded-2xl text-sm">
+            <option>Classic Smooth (CS27)</option><option>Premium Smooth (PS30)</option><option>Deluxe Smooth (DS33)</option>
+            <option>Regular Linen (RL28)</option><option>Gaming Linen (GL28)</option><option>Casino Linen (CL31)</option>
+            <option>Sturdy Layers (SL35)</option><option>Eco-friendly (EF27)</option><option>Waterproof Plastic (WP10)</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Packaging</label>
+          <select name="packaging" class="w-full border px-3 py-2 rounded-2xl text-sm">
+            <option>Custom Booster Pack (TCG Size)</option>
+            <option>Custom Paper Booster Packs</option>
+            <option>Shrink-wrapped</option>
+            <option>Custom Tuck Box</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Custom</label>
+          <select name="custom" class="w-full border px-3 py-2 rounded-2xl text-sm">
+            <option>Custom</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Front Design</label>
+          <select name="front_design" class="w-full border px-3 py-2 rounded-2xl text-sm">
+            <option>Same for all front</option>
+            <option>Different for all front</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Back Design</label>
+          <select name="back_design" class="w-full border px-3 py-2 rounded-2xl text-sm">
+            <option>Same for all back</option>
+            <option>Different for all backs</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-500">JSON File</label>
+        <input type="file" name="json_file" accept=".json,.txt" class="block w-full text-sm" required>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="document.getElementById('product-upload-modal').classList.add('hidden')" class="flex-1 py-2 border rounded-2xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2 bg-slate-900 text-white rounded-2xl">Upload &amp; Store</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -67,7 +137,7 @@
 </div>
 
 <script>
-async function showJsonHistory(templateId) {
+async function showJsonHistory(templateId, filename) {
   const modal = document.getElementById('json-modal');
   const titleEl = document.getElementById('modal-title');
   const contentEl = document.getElementById('modal-content');
@@ -82,12 +152,46 @@ async function showJsonHistory(templateId) {
     const html = await res.text();
     contentEl.innerHTML = html;
     titleEl.textContent = 'JSON Request History';
-    // Try to set download link if a filename appears
-    const firstLink = contentEl.querySelector('a[href*="/uploads"]');
-    if (firstLink) dl.href = firstLink.href;
+    if (filename) {
+      dl.href = '/uploads/json_files/' + filename;
+      dl.setAttribute('download', filename);
+    } else {
+      const firstLink = contentEl.querySelector('a[href*="/uploads"]');
+      if (firstLink) dl.href = firstLink.href;
+    }
   } catch(e) {
     contentEl.innerHTML = 'Failed to load history.';
   }
+}
+
+function filterJsonTable() {
+  const q = (document.getElementById('json-search').value || '').toLowerCase();
+  const rows = document.querySelectorAll('#json-tbody tr');
+  rows.forEach(r => {
+    const txt = r.textContent.toLowerCase();
+    r.style.display = txt.indexOf(q) > -1 ? '' : 'none';
+  });
+}
+
+function sortJsonTable(colIdx) {
+  const table = document.getElementById('json-table');
+  const tbody = document.getElementById('json-tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const idx = (typeof colIdx === 'number') ? colIdx : parseInt(document.getElementById('json-sort').value || '0');
+  const dir = table.getAttribute('data-sort-dir') === 'asc' ? -1 : 1;
+  rows.sort((a, b) => {
+    const va = (a.children[idx] ? a.children[idx].textContent : '').trim().toLowerCase();
+    const vb = (b.children[idx] ? b.children[idx].textContent : '').trim().toLowerCase();
+    if (!isNaN(va) && !isNaN(vb)) return (parseFloat(va) - parseFloat(vb)) * dir;
+    return va.localeCompare(vb) * dir;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  table.setAttribute('data-sort-dir', dir === 1 ? 'desc' : 'asc');
+}
+
+function showProductUploadModal() {
+  const m = document.getElementById('product-upload-modal');
+  if (m) m.classList.remove('hidden');
 }
 </script>
 {% endblock %}
