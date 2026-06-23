@@ -1243,6 +1243,51 @@ def create_product(name: str, category: str = None, specs: list[str] = None, sub
         pass
     return pid
 
+def delete_product(product_id: int):
+    """Delete a product (and clean up all references to it)."""
+    if _DEMO_MODE:
+        global _DEMO_PRODUCTS, _DEMO_CLIENT_PRODUCTS
+        # Remove from products
+        _DEMO_PRODUCTS = [p for p in _DEMO_PRODUCTS if p.get("id") != product_id]
+        # Clean up associations
+        _DEMO_CLIENT_PRODUCTS = [x for x in _DEMO_CLIENT_PRODUCTS if x.get("product_id") != product_id]
+        
+        try:
+            message = f"Product deleted (ID: {product_id})"
+            add_system_log(message, ["product"])
+        except Exception:
+            pass
+        return
+
+    # Real database mode
+    try:
+        # Clean dependent tables first (in case no FK cascade delete)
+        for tbl, col in [
+            ("client_products", "product_id"),
+            # Add other tables here in the future if they reference products
+            # ("sales_records", "product_id"),
+            # ("deliveries", "product_id"),
+        ]:
+            try:
+                _execute(f"DELETE FROM {tbl} WHERE {col} = %s", (product_id,))
+            except Exception:
+                pass  # Table might not exist or column missing - continue
+
+        # Finally delete the product
+        _execute("DELETE FROM products WHERE id = %s", (product_id,))
+
+        try:
+            message = f"Product deleted (ID: {product_id})"
+            add_system_log(message, ["product"])
+        except Exception:
+            pass
+
+    except Exception as e:
+        if "1146" in str(e) or "doesn't exist" in str(e).lower():
+            # Table doesn't exist (e.g. fresh setup) - silently succeed in demo-like fashion
+            pass
+        else:
+            raise
 
 def get_client_products(client_id: int) -> list[dict]:
     if _DEMO_MODE:
@@ -1292,11 +1337,11 @@ def save_client_json_send(client_id: int, uploaded_file=None, product: str = Non
     base = _clean_part(product or "Template")
     if not base:
         base = "Template"
-    spec_part = ""
-    if product_specs:
-        cleaned = [_clean_part(s) for s in product_specs if s and str(s).strip()]
-        if cleaned:
-            spec_part = "_" + "_".join(cleaned)[:80]
+    spec_part = datetime.now().date()
+    # if product_specs:
+    #     cleaned = [_clean_part(s) for s in product_specs if s and str(s).strip()]
+    #     if cleaned:
+    #         spec_part = "_" + "_".join(cleaned)[:80]
     derived_name = f"{base}{spec_part}.json"
     if not derived_name.lower().endswith(".json"):
         derived_name += ".json"
