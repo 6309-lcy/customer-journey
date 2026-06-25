@@ -17,10 +17,18 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "dev-secret-change-in-prod")
 app.config["UPLOAD_FOLDER"] = database.UPLOAD_DIR
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True  # required when SameSite=None
 
 # Demo login (popup-style login page + creds printed for external ngrok demo)
 DEMO_USER = "admin"
 DEMO_PASS = "cj2026demo"
+
+@app.after_request
+def add_headers(response):
+    response.headers['X-Frame-Options'] = 'ALLOWALL'
+    response.headers['Content-Security-Policy'] = "frame-ancestors *"
+    return response
 
 @app.before_request
 def require_login():
